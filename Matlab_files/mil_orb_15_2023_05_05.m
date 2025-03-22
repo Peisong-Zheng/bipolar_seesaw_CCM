@@ -318,8 +318,8 @@ Pd = 1-Pfa;
 [pxx,f,pth] = plomb(temp_spa(:,2),temp_spa(:,1)./1000, 'normalized','Pd',Pd);
 plot([1/41,1/41],ylim,'k')
 rectangle('position',[1/23,0,1/19-1/23,max(ylim)],'linestyle','none','facecolor',[0.7 0.7 0.7]);
-line(f,pxx)
-L=line(f,pth*ones(size(f')));
+line(f,pxx,'color',[0,0,1])
+L=line(f,pth*ones(size(f')),'color',[0,1,0]);
 legend(L,'Threshold of significance');
 xlabel('Frequency (1/kyr)')
 ylabel('Power')
@@ -329,6 +329,7 @@ text(1/58,max(ylim)+2,'41 kyr');
 text(1/18,max(ylim)-2,'19 to 23 kyr');
 xlabel('Frequency (1/kyr)')
 ylabel('Power density')
+xlim([0,0.2])
 h = annotation('textbox',[0.06 0.47 0  0],'String','c','FitBoxToText','on');
 set(h,'LineStyle', 'none','fontweight','bold');
 
@@ -344,11 +345,12 @@ axis([0 0.3 0 20]);
 [pxx,f,pth] = plomb(temp_spa(:,2),temp_spa(:,1)./1000, 'normalized','Pd',Pd);
 plot([1/41,1/41],ylim,'k')
 rectangle('position',[1/23,0,1/19-1/23,max(ylim)],'linestyle','none','facecolor',[0.7 0.7 0.7]);
-line(f,pxx)
-L=line(f,pth*ones(size(f')));
+line(f,pxx,'color',[0.8500 0.3250 0.0980])
+L=line(f,pth*ones(size(f')),'color',[0,1,0]);
 legend(L,'Threshold of significance');
 xlabel('Frequency (1/kyr)')
 ylabel('Power density')
+xlim([0,0.2])
 title('Dummy AT')
 text(0.2*[1],pth+3,[repmat('P_{fa} = ',[1 1]) num2str(Pfa')])
 text(1/58,max(ylim)+1.5,'41 kyr');
@@ -370,9 +372,9 @@ axis([0 120000 -4 4]);
 hold on
 temp_pre=fil_pre(temp);
 edc_pre=fil_pre(edc);
-p2=plot(edc_pre(:,1),zscore(edc_pre(:,2)),'k');
-p3=plot(pre(:,1),-zscore(pre(:,2)),'b--');
-p1=plot(temp_pre(:,1),zscore(temp_pre(:,2)),'color',[0.7 0.7 0.7]);
+p2=plot(edc_pre(:,1),zscore(edc_pre(:,2)),'b');
+p3=plot(pre(:,1),-zscore(pre(:,2)),'k--');
+p1=plot(temp_pre(:,1),zscore(temp_pre(:,2)),'color',[0.8500 0.3250 0.0980]);
 
 L=legend([p1,p2,p3],'pre component, dummy AT','pre component, EDC δ^1^8O','-1*precession');
 set(L,'NumColumns',3);

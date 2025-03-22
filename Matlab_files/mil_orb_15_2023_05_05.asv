@@ -293,8 +293,8 @@ set(h,'LineStyle', 'none','fontweight','bold');
 axes('Position',[0.1 0.55 0.8 0.16]);
 hold on
 axis([0 120000 -4 4]);
-p2=plot(edc(:,1),zscore(edc(:,2)));
-p1=plot(temp(:,1),zscore(temp(:,2)),'color',[0.7 0.7 0.7]);
+p2=plot(edc(:,1),zscore(edc(:,2)),'b');
+p1=plot(temp(:,1),zscore(temp(:,2)),'color',[0.8500 0.3250 0.0980]);
 % plot(obl(:,1),zscore(obl(:,2)),'k');
 % plot(j65s(:,1),zscore(j65s(:,2)),'k--');
 L=legend([p1,p2],'Dummy AT','EDC δ^1^8O');
@@ -316,10 +316,10 @@ temp_spa(:,2)=detrend(temp_spa(:,2),3);
 Pfa = 5/100;
 Pd = 1-Pfa;
 [pxx,f,pth] = plomb(temp_spa(:,2),temp_spa(:,1)./1000, 'normalized','Pd',Pd);
-plot([1/41,1/41],ylim,'r')
+plot([1/41,1/41],ylim,'k')
 rectangle('position',[1/23,0,1/19-1/23,max(ylim)],'linestyle','none','facecolor',[0.7 0.7 0.7]);
-line(f,pxx)
-L=line(f,pth*ones(size(f')));
+line(f,pxx,'color',[0,0,1])
+L=line(f,pth*ones(size(f')),'color',[0,1,0]);
 legend(L,'Threshold of significance');
 xlabel('Frequency (1/kyr)')
 ylabel('Power')
@@ -329,8 +329,11 @@ text(1/58,max(ylim)+2,'41 kyr');
 text(1/18,max(ylim)-2,'19 to 23 kyr');
 xlabel('Frequency (1/kyr)')
 ylabel('Power density')
+xlim([0,0.2])
 h = annotation('textbox',[0.06 0.47 0  0],'String','c','FitBoxToText','on');
 set(h,'LineStyle', 'none','fontweight','bold');
+
+
 
 axes('Position',[0.55 0.3 0.35 0.16]);
 axis([0 0.1 0 30]);
@@ -340,19 +343,25 @@ Pfa = 5/100;
 Pd = 1-Pfa;
 axis([0 0.3 0 20]);
 [pxx,f,pth] = plomb(temp_spa(:,2),temp_spa(:,1)./1000, 'normalized','Pd',Pd);
-plot([1/41,1/41],ylim,'r')
+plot([1/41,1/41],ylim,'k')
 rectangle('position',[1/23,0,1/19-1/23,max(ylim)],'linestyle','none','facecolor',[0.7 0.7 0.7]);
-line(f,pxx)
-L=line(f,pth*ones(size(f')));
+line(f,pxx,'color',[0.8500 0.3250 0.0980])
+L=line(f,pth*ones(size(f')),'color',[0,1,0]);
 legend(L,'Threshold of significance');
 xlabel('Frequency (1/kyr)')
 ylabel('Power density')
-title('DO sequence generated')
+xlim([0,0.2])
+title('Dummy AT')
 text(0.2*[1],pth+3,[repmat('P_{fa} = ',[1 1]) num2str(Pfa')])
 text(1/58,max(ylim)+1.5,'41 kyr');
 text(1/18,max(ylim)-2,'19 to 23 kyr');
 h = annotation('textbox',[0.5 0.47 0  0],'String','d','FitBoxToText','on');
 set(h,'LineStyle', 'none','fontweight','bold');
+
+
+
+
+
 
 
 % compare the precession component, where the precession component is got
@@ -363,11 +372,11 @@ axis([0 120000 -4 4]);
 hold on
 temp_pre=fil_pre(temp);
 edc_pre=fil_pre(edc);
-p2=plot(edc_pre(:,1),zscore(edc_pre(:,2)),'k');
-p3=plot(pre(:,1),-zscore(pre(:,2)),'b--');
-p1=plot(temp_pre(:,1),zscore(temp_pre(:,2)),'color',[0.7 0.7 0.7]);
+p2=plot(edc_pre(:,1),zscore(edc_pre(:,2)),'b');
+p3=plot(pre(:,1),-zscore(pre(:,2)),'k--');
+p1=plot(temp_pre(:,1),zscore(temp_pre(:,2)),'color',[0.8500 0.3250 0.0980]);
 
-L=legend([p1,p2,p3],'precession component, DO sequence generated','precession component, EDC δ^1^8O','-1 times precession');
+L=legend([p1,p2,p3],'pre component, dummy AT','pre component, EDC δ^1^8O','-1*precession');
 set(L,'NumColumns',3);
 tick=get(gca,'xtick');
 set(gca,'xticklabel',num2str(tick'/1000));
