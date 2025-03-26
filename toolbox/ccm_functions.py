@@ -165,7 +165,7 @@ def ccm_DOXmapForcing(df_sd, df_pre,
         ax.plot(df["Time"], zscore(df[column_name]), "r-", label=column_name)
         ax.plot(df["Time"], zscore(df[target_name]), "b-", label=target_name)
         ax.set_xlabel("Time (age)")
-        ax.set_ylabel("Z-score")
+        ax.set_ylabel("Normalized values")
         ax.legend()
         plt.title("Time Series of Predictor vs. Target")
         plt.show()
