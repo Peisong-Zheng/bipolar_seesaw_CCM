@@ -1,105 +1,110 @@
-import xarray as xr
-import pandas as pd
 import numpy as np
-import random
-
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-
+import pandas as pd
+import matplotlib.pyplot as plt
 from pyEDM import EmbedDimension
 
-def find_optimal_E_tau(df_sd, df_pre, maxE=5, maxTau=20):
+def find_optimal_E_tau(df_sd, df_pre, maxE=5, tau_min=-20, Tp=0):
     """
-    Builds a combined DataFrame, performs EmbedDimension scans for E=1..maxE 
-    and tau=1..maxTau, plots a 3D surface of rho vs. E & tau,
-    and returns the best (E, tau) along with the RhoMatrix of shape (maxE, maxTau).
-
+    Modified version with negative tau values and 2D colormap visualization
+    
     Parameters
     ----------
     df_sd   : pd.DataFrame
-        DataFrame containing at least columns ["age", X], where X is the second column.
+        Input DataFrame with ["age", X] columns
     df_pre  : pd.DataFrame
-        DataFrame containing at least columns ["age", Y], where Y is the second column.
+        Target DataFrame with ["age", Y] columns
     maxE    : int
-        Maximum embedding dimension to explore.
-    maxTau  : int
-        Maximum lag (tau) to explore.
-
+        Maximum embedding dimension
+    tau_min : int
+        Minimum tau value (negative integer)
+    
     Returns
     -------
     best_E : int
-        The E (1..maxE) that yields the highest rho
+        Optimal embedding dimension
     best_tau : int
-        The tau (1..maxTau) that yields the highest rho
+        Optimal tau value (negative)
     RhoMatrix : np.ndarray
-        A 2D array of shape (maxE, maxTau) with rho values
+        Rho values matrix
     """
+    # Get column names
+    column_name = df_sd.columns[1]
+    target_name = df_pre.columns[1]
 
-    # Step 1: automatically figure out the column names (other than "age")
-    column_name = df_sd.columns[1]    # second column in df_sd
-    target_name = df_pre.columns[1]   # second column in df_pre
-
-    # Step 2: create df_tmp automatically
+    # Create combined DataFrame
     df_tmp = pd.DataFrame({
-        "Time":       df_pre["age"],         # or df_sd["age"], if same length
-        column_name:  df_sd[column_name],    # predictor
-        target_name:  df_pre[target_name],   # target
+        "Time": df_pre["age"],
+        column_name: df_sd[column_name],
+        target_name: df_pre[target_name]
     })
 
-    # Example: leaving 10 points out of library if that was your intention
+    # Calculate library size
     lib_length = len(df_tmp) - 10
-    lib_str  = f"1 {lib_length}"
+    lib_str = f"1 {lib_length}"
     pred_str = f"1 {lib_length}"
-    print(f"[INFO] Using lib={lib_str}, pred={pred_str}")
+    print(f"Using lib={lib_str}, pred={pred_str}")
 
-    # We'll store a 2D array for E=1..maxE, tau=1..maxTau
-    RhoMatrix = np.zeros((maxE, maxTau))
+    # Initialize RhoMatrix with negative tau range
+    tau_values = np.arange(-1, tau_min-1, -1)  # -1 to tau_min (inclusive)
+    RhoMatrix = np.zeros((maxE, len(tau_values)))
 
-    # For each tau in 1..maxTau, call EmbedDimension once with maxE, Tp=0
-    for tau in range(1, maxTau + 1):
+    # Main loop with negative tau values
+    for tau_idx, tau in enumerate(tau_values):
         edm_out = EmbedDimension(
-            dataFrame = df_tmp,
-            columns   = column_name,  # predictor
-            target    = target_name,  # target to predict
-            maxE      = maxE,
-            tau       = tau,
-            Tp        = 0,
-            lib       = lib_str,
-            pred      = pred_str,
-            showPlot  = False
+            dataFrame=df_tmp,
+            columns=column_name,
+            target=target_name,
+            maxE=maxE,
+            tau=tau,
+            Tp=Tp,
+            lib=lib_str,
+            pred=pred_str,
+            showPlot=False
         )
 
-        # edm_out has columns [E, rho, MAE, RMSE, ...]
+        # Store rho values
         for e_row in edm_out.itertuples():
-            e_val = int(e_row.E)  # ensure integer index
-            rho_val = e_row.rho
-            # Fill the matrix for row=(E-1), col=(tau-1)
-            RhoMatrix[e_val - 1, tau - 1] = rho_val
+            e_val = int(e_row.E)
+            RhoMatrix[e_val-1, tau_idx] = e_row.rho
 
-    # Build a 3D surface plot
-    E_axis   = np.arange(1, maxE + 1)   # E = 1..maxE
-    Tau_axis = np.arange(1, maxTau + 1) # tau = 1..maxTau
+    # Create coordinate grids with corrected edge generation
+    E_axis = np.arange(1, maxE + 1)
+    tau_values = np.arange(-1, tau_min - 1, -1)
+    
+    # Generate edges with exact boundaries
+    E_edges = np.linspace(0.5, maxE + 0.5, maxE + 1)  # Corrected E edges
+    tau_edges = np.linspace(-0.5, tau_min - 0.5, len(tau_values) + 1)  # Corrected tau edges
+    
+    plt.figure(figsize=(8, 6))
+    
+    # Create plot with verified dimensions
+    plt.pcolormesh(tau_edges, E_edges, RhoMatrix,
+                 cmap='viridis', shading='flat')
+    
+    plt.colorbar(label='Rho', shrink=0.8)
+    plt.xlabel('Tau')
+    plt.ylabel('E')
+    # plt.title('Rho Values vs E and Tau')
+    
+    # Set ticks at data positions
+    plt.xticks(tau_values[::2])
+    plt.yticks(E_axis)
+    
+    # Invert x-axis to show most negative on left
+    plt.gca().invert_xaxis()
+    
+    plt.show()
 
-    fig = go.Figure(data=[go.Surface(z=RhoMatrix, x=Tau_axis, y=E_axis)])
-    fig.update_layout(
-        title='Interactive 3D Surface: Rho vs. E and tau',
-        scene=dict(
-            xaxis_title='tau',
-            yaxis_title='E',
-            zaxis_title='rho',
-        ),
-        autosize=True,
-    )
-    fig.show()
-
-    # Find the best (E, tau) by looking for the maximum rho in the entire matrix
+    # Find optimal parameters
     best_index = np.unravel_index(np.argmax(RhoMatrix), RhoMatrix.shape)
-    best_E     = best_index[0] + 1  # +1 because index is zero-based
-    best_tau   = best_index[1] + 1
+    best_E = best_index[0] + 1
+    best_tau = tau_values[best_index[1]]
 
-    print(f"[INFO] Best E={best_E}, tau={best_tau} with rho={RhoMatrix[best_index]:.3f}")
+    print(f"Best E={best_E}, tau={best_tau} with rho={RhoMatrix[best_index]:.3f}")
 
     return best_E, best_tau, RhoMatrix
+
+
 
 
 
@@ -112,10 +117,11 @@ import matplotlib.pyplot as plt
 from scipy.stats import zscore
 
 def ccm_DOXmapForcing(df_sd, df_pre,
-                      E=4, tau=8,
+                      E=4, tau=-8,
                       libSizes="100 200 300 400 500 600 700",
                       Tp=0,
                       sample=20,
+                      random=False,
                       showPlot=True):
     """
     Perform Convergent Cross Mapping (CCM) between the second columns of
@@ -179,7 +185,7 @@ def ccm_DOXmapForcing(df_sd, df_pre,
         target      = target_name,   # target
         libSizes    = libSizes,
         sample      = sample,
-        random      = True,
+        random      = random,
         replacement = False,
         Tp          = Tp
     )
