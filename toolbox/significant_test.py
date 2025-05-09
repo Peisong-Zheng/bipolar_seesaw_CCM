@@ -139,13 +139,13 @@ def ccm_significance_test_v2(
         # Stack the surrogate data for Y:X and X:Y
         yx_surrogates = np.column_stack([out_xy["Y:X"].values for out_xy in ran_ccm_list_xy])
         # 5th and 95th percentiles for the Y:X surrogates
-        yx_min = np.percentile(yx_surrogates, 5, axis=1)
-        yx_max = np.percentile(yx_surrogates, 95, axis=1)
+        yx_min = np.percentile(yx_surrogates, 2.5, axis=1)
+        yx_max = np.percentile(yx_surrogates, 97.5, axis=1)
 
         xy_surrogates = np.column_stack([out_xy["X:Y"].values for out_xy in ran_ccm_list_xy])
         # 5th and 95th percentiles for the X:Y surrogates
-        xy_min = np.percentile(xy_surrogates, 5, axis=1)
-        xy_max = np.percentile(xy_surrogates, 95, axis=1)
+        xy_min = np.percentile(xy_surrogates, 2.5, axis=1)
+        xy_max = np.percentile(xy_surrogates, 97.5, axis=1)
 
         # Fill between for X->Y and Y->X
         ax.fill_between(libsize, xy_min, xy_max, color="r", alpha=0.2, label='', edgecolor='none')
@@ -265,13 +265,13 @@ def ccm_significance_hist(ccm_mean, ensemble_ccm, uni_dir=False, column_name='sa
     significant_sat2pre = (mean_sat2pre > upper_sat2pre)
     
     # Condition 2: Mean pre->SAT prediction (Y:X) is within the ensemble range.
-    non_significant_pre2sat = (mean_pre2sat <= upper_pre2sat)
+    significant_pre2sat = (mean_pre2sat > upper_pre2sat)
     
     # return significant_sat2pre and non_significant_pre2sat
     if uni_dir:
         return significant_sat2pre
     else:
-        return significant_sat2pre and non_significant_pre2sat
+        return significant_sat2pre, significant_pre2sat
 
 
 
