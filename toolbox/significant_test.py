@@ -15,8 +15,12 @@ def ccm_significance_test_v2(
     Tp=0,
     sample=100,
     random=False,
+    column_name=None,
+    target_name=None,
     uni_dir=False,
-    showPlot=True
+    showPlot=True,
+    title_column_name=None,
+    title_target_name=None
 ):
 
 
@@ -35,8 +39,16 @@ def ccm_significance_test_v2(
         
         return randomized_swapped
 
-    column_name=df_sd.columns[1]
-    target_name=df_pre.columns[1]
+    if column_name is None:
+        column_name=df_sd.columns[1]
+    if target_name is None:
+        target_name=df_pre.columns[1]
+
+
+    if title_column_name is None:
+        title_column_name = column_name.replace('_', r'\_')
+    if title_target_name is None:
+        title_target_name = target_name.replace('_', r'\_')
 
     df = pd.DataFrame({
         "Time": df_pre["age"],
@@ -93,6 +105,10 @@ def ccm_significance_test_v2(
         )
         ran_ccm_list_xy.append(out_xy)
 
+    
+    safe_column_name =title_column_name
+    safe_target_name =title_target_name
+
     if showPlot:
         # create a figure and plot the original time series and the randomized time series
         fig1, ax = plt.subplots(1, 1, figsize=(10, 3),dpi=100)
@@ -101,8 +117,8 @@ def ccm_significance_test_v2(
         for i in range(n_ran):
             ax.plot(df["Time"], zscore(ran_time_series[i]), color='grey', alpha=0.3)
         
-        ax.plot(df["Time"], zscore(df["X"]), color='b', label=column_name)
-        ax.plot(df["Time"], zscore(df["Y"]), color='orange', label=target_name)
+        ax.plot(df["Time"], zscore(df["X"]), color='b', label=fr"${safe_column_name}$")
+        ax.plot(df["Time"], zscore(df["Y"]), color='orange', label=fr"${safe_target_name}$")
 
         ax.set_xlabel("Time")
         ax.set_ylabel("Value")
@@ -110,8 +126,9 @@ def ccm_significance_test_v2(
         plt.show()
 
 
-    safe_column_name = column_name.replace('_', r'\_')
-    safe_target_name = target_name.replace('_', r'\_')
+    # safe_column_name = column_name.replace('_', r'\_')
+    # safe_target_name = target_name.replace('_', r'\_')
+
 
     if showPlot:
 
@@ -271,8 +288,12 @@ def ccm_significance_test_v3(
     Tp=0,
     sample=100,
     random=False,
+    column_name=None,
+    target_name=None,
     uni_dir=False,
-    showPlot=True
+    showPlot=True,
+    title_column_name=None,
+    title_target_name=None
 ):
 
     def randomize_stadial(stadial_data, seed=None):
@@ -303,8 +324,15 @@ def ccm_significance_test_v3(
         
         return surrogate_data
 
-    column_name=df_sd.columns[1]
-    target_name=df_pre.columns[1]
+    if column_name is None:
+        column_name=df_sd.columns[1]
+    if target_name is None:
+        target_name=df_pre.columns[1]
+
+    if title_column_name is None:
+        title_column_name = column_name.replace('_', r'\_')
+    if title_target_name is None:
+        title_target_name = target_name.replace('_', r'\_')
 
     df = pd.DataFrame({
         "Time": df_pre["age"],
@@ -361,6 +389,10 @@ def ccm_significance_test_v3(
         )
         ran_ccm_list_xy.append(out_xy)
 
+
+    safe_column_name =title_column_name
+    safe_target_name =title_target_name
+
     if showPlot:
         # create a figure and plot the original time series and the randomized time series
         fig1, ax = plt.subplots(1, 1, figsize=(10, 3),dpi=100)
@@ -369,17 +401,13 @@ def ccm_significance_test_v3(
         for i in range(n_ran):
             ax.plot(df["Time"], zscore(ran_time_series[i]), color='grey', alpha=0.3)
         
-        ax.plot(df["Time"], zscore(df["X"]), color='b', label=column_name)
-        ax.plot(df["Time"], zscore(df["Y"]), color='orange', label=target_name)
+        ax.plot(df["Time"], zscore(df["X"]), color='b', label=fr"${safe_column_name}$")
+        ax.plot(df["Time"], zscore(df["Y"]), color='orange', label=fr"${safe_target_name}$")
 
         ax.set_xlabel("Time")
         ax.set_ylabel("Value")
         ax.legend()
         plt.show()
-
-
-    safe_column_name = column_name.replace('_', r'\_')
-    safe_target_name = target_name.replace('_', r'\_')
 
     if showPlot:
 
