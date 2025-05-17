@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from itertools import groupby
 from scipy.interpolate import interp1d
 
-def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,if_plot=False, dir='gt', diff=False):
+def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,if_plot=False, dir='gt', diff=False, metrics='precision'):
     """
     1) Interpolate the δ18O series to 10-yr steps
     2) Grid-search low-freq window & threshold to maximize F1
@@ -94,10 +94,19 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
         fp = np.sum(pred & ~true)
         fn = np.sum(~pred & true)
         return 2*tp/(2*tp + fp + fn) if (2*tp + fp + fn)>0 else 0
+    
+
+    def precision_score(pred, true):
+        tp = np.sum(pred & true)
+        fp = np.sum(pred & ~true)
+        return tp/(tp + fp) if (tp + fp) > 0 else 0
 
     # --- 2) grid-search ---
     window_range = np.arange(2000, 6001, 10)
-    best = {'window':None, 'thr':None, 'dir':None, 'f1':-1}
+    if metrics == 'F1':
+        best = {'window':None, 'thr':None, 'dir':None, 'f1':-1}
+    elif metrics == 'precision':
+        best = {'window':None, 'thr':None, 'dir':None, 'precision':-1}
 
     for w in window_range:
         smooth_lo   = new_df[col].rolling(window=w, center=True, min_periods=1).mean()
@@ -123,13 +132,26 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
         for direction in dirs:
             for thr in thr_cands:
                 pred = (vals>thr) if direction=='gt' else (vals<thr)
-                score = f1_score(pred, true)
-                if score>best['f1']:
-                    best.update(window=w, thr=thr, dir=direction, f1=score)
+                if metrics == 'F1':
+                    score = f1_score(pred, true)
+                    
+                    if score>best['f1']:
+                        best.update(window=w, thr=thr, dir=direction, f1=score)
 
-    print(f"→ optimal window={best['window']}, "
-          f"threshold {best['dir']} {best['thr']:.3f}, "
-          f"max F1={best['f1']:.3f}")
+                elif metrics == 'precision':
+                    score = precision_score(pred, true)
+                    if score > best['precision']:
+                        best.update(window=w, thr=thr, dir=direction, precision=score)
+
+    if metrics == 'F1':
+        print(f"→ optimal window={best['window']}, "
+            f"threshold {best['dir']} {best['thr']:.3f}, "
+            f"max F1={best['f1']:.3f}")
+        
+    elif metrics == 'precision':
+        print(f"→ optimal window={best['window']}, "
+            f"threshold {best['dir']} {best['thr']:.3f}, "
+            f"max precision={best['precision']:.3f}")
 
     # --- 3) build square wave on full record ---
     lo       = new_df[col].rolling(window=best['window'], 
@@ -181,7 +203,10 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
 
         # 3) plot the anomaly curve
         ax.plot(new_df['age'], anom_sm, color='green', label=f"{col} anomaly")
-        ax.set_title(f"Optimal window={best['window']}, thr={best['thr']:.3f}, F1={best['f1']:.3f}")
+        if metrics == 'F1':
+            ax.set_title(f"Optimal window={best['window']}, thr={best['thr']:.3f}, F1={best['f1']:.3f}")
+        elif metrics == 'precision':
+            ax.set_title(f"Optimal window={best['window']}, thr={best['thr']:.3f}, precision={best['precision']:.3f}")
 
         # # 4) threshold line
         # ax.axhline(best['thr'], color='black', linestyle='--',
