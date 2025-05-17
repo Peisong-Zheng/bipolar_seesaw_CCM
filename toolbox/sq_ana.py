@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from itertools import groupby
 from scipy.interpolate import interp1d
 
-def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,if_plot=False, dir='gt'):
+def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,if_plot=False, dir='gt', diff=False):
     """
     1) Interpolate the δ18O series to 10-yr steps
     2) Grid-search low-freq window & threshold to maximize F1
@@ -96,12 +96,18 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
         return 2*tp/(2*tp + fp + fn) if (2*tp + fp + fn)>0 else 0
 
     # --- 2) grid-search ---
-    window_range = np.arange(3_000, 20_001, 100)
+    window_range = np.arange(3_00, 50_01, 10)
     best = {'window':None, 'thr':None, 'dir':None, 'f1':-1}
 
     for w in window_range:
         smooth_lo   = new_df[col].rolling(window=w, center=True, min_periods=1).mean()
         anomaly     = new_df[col] - smooth_lo
+
+        if diff:
+            # compute first differences in pandas (preserves index & length)
+            anomaly = anomaly.diff().fillna(0)
+
+
         if extra_sm>0:
             anomaly_sm = anomaly.rolling(window=extra_sm, center=True, min_periods=1).mean()
         # anomaly_sm  = anomaly.rolling(window=50, center=True, min_periods=1).mean()
@@ -129,10 +135,13 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
     lo       = new_df[col].rolling(window=best['window'], 
                                    center=True, min_periods=1).mean()
     anom     = new_df[col] - lo
-    # anom_sm  = anom.rolling(window=50, center=True, min_periods=1).mean().values
-    # anom_sm = anom
+    if diff:
+        # compute first differences in pandas (preserves index & length)
+        anom = anom.diff().fillna(0)
+
     if extra_sm>0:
         anom_sm = anom.rolling(window=extra_sm, center=True, min_periods=1).mean()
+
     if extra_sm == 0:
         anom_sm=anom
 
@@ -504,4 +513,7 @@ def plot_transition_distribution(df_pre, df_sq, lags=None):
         ax2.legend()
 
         plt.show()
+
+
+
 
