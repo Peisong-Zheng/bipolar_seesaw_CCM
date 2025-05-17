@@ -96,7 +96,7 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
         return 2*tp/(2*tp + fp + fn) if (2*tp + fp + fn)>0 else 0
 
     # --- 2) grid-search ---
-    window_range = np.arange(3_00, 50_01, 10)
+    window_range = np.arange(2000, 6001, 10)
     best = {'window':None, 'thr':None, 'dir':None, 'f1':-1}
 
     for w in window_range:
