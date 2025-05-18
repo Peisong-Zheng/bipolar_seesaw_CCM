@@ -17,7 +17,30 @@ import matplotlib.pyplot as plt
 from itertools import groupby
 from scipy.interpolate import interp1d
 
-def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,if_plot=False, dir='gt', diff=False, metrics='precision'):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,if_plot=False, dir='gt', metrics='F1'):
     """
     1) Interpolate the δ18O series to 10-yr steps
     2) Grid-search low-freq window & threshold to maximize F1
@@ -102,7 +125,7 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
         return tp/(tp + fp) if (tp + fp) > 0 else 0
 
     # --- 2) grid-search ---
-    window_range = np.arange(2000, 6001, 10)
+    window_range = np.arange(500, 3001, 10)
     if metrics == 'F1':
         best = {'window':None, 'thr':None, 'dir':None, 'f1':-1}
     elif metrics == 'precision':
@@ -111,10 +134,6 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
     for w in window_range:
         smooth_lo   = new_df[col].rolling(window=w, center=True, min_periods=1).mean()
         anomaly     = new_df[col] - smooth_lo
-
-        if diff:
-            # compute first differences in pandas (preserves index & length)
-            anomaly = anomaly.diff().fillna(0)
 
 
         if extra_sm>0:
@@ -127,6 +146,7 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
         true = mask_crop[new_df['age']<120_000]
 
         thr_min, thr_max = vals.min(), vals.max()
+        print(f"Window {w} → min={thr_min:.3f}, max={thr_max:.3f}")
         thr_cands = np.linspace(thr_min, thr_max, 101)
         dirs = ([dir] if dir in ('gt','lt') else ['gt','lt'])
         for direction in dirs:
@@ -157,9 +177,7 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
     lo       = new_df[col].rolling(window=best['window'], 
                                    center=True, min_periods=1).mean()
     anom     = new_df[col] - lo
-    if diff:
-        # compute first differences in pandas (preserves index & length)
-        anom = anom.diff().fillna(0)
+
 
     if extra_sm>0:
         anom_sm = anom.rolling(window=extra_sm, center=True, min_periods=1).mean()
