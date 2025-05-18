@@ -125,7 +125,7 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
         return tp/(tp + fp) if (tp + fp) > 0 else 0
 
     # --- 2) grid-search ---
-    window_range = np.arange(500, 3001, 10)
+    window_range = np.arange(500, 6001, 100)
     if metrics == 'F1':
         best = {'window':None, 'thr':None, 'dir':None, 'f1':-1}
     elif metrics == 'precision':
