@@ -21,7 +21,179 @@ from scipy.interpolate import interp1d
 
 
 
+import numpy as np
+import matplotlib.pyplot as plt
+from pyinform import transfer_entropy
 
+def transfer_entropy_surrogate_test(
+    forcing, sq, k=1,
+    forcing_bins=4, sq_bins=2,
+    n_surr=100, p=0.05, if_plot=True, dpi=100
+):
+    """
+    Test for unidirectional causality using transfer entropy and surrogates.
+    """
+    # Reverse series
+    x = np.asarray(forcing)[::-1]
+    y = np.asarray(sq)[::-1]
+    # Discretize
+    xbins = np.histogram_bin_edges(x, bins=forcing_bins)
+    ybins = np.histogram_bin_edges(y, bins=sq_bins)
+    x_disc = np.digitize(x, xbins) - 1
+    y_disc = np.digitize(y, ybins) - 1
+    
+    # Empirical TE (one-step, history k)
+    te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
+    te_yx = transfer_entropy(y_disc[:-1], x_disc[1:], k=k)
+    
+    # Surrogate nulls
+    null_xy = np.zeros(n_surr)
+    null_yx = np.zeros(n_surr)
+    for i in range(n_surr):
+        xs = np.random.permutation(x_disc)
+        null_xy[i] = transfer_entropy(xs[:-1], y_disc[1:], k=k)
+        ys = np.random.permutation(y_disc)
+        null_yx[i] = transfer_entropy(ys[:-1], x_disc[1:], k=k)
+    
+    # p-values
+    p_xy = (np.sum(null_xy >= te_xy) + 1) / (n_surr + 1)
+    p_yx = (np.sum(null_yx >= te_yx) + 1) / (n_surr + 1)
+    
+    # Plot if requested
+    if if_plot:
+        plt.figure(figsize=(5, 3.5), dpi=dpi)
+
+        # forcing → sq histogram
+        plt.hist(
+            null_xy, bins=25,
+            color='#CC6677',       # light blue
+            alpha=0.7,
+            label='Null TE (forcing→sq)',
+            edgecolor='white'
+        )
+        # forcing → sq empirical line
+        plt.axvline(
+            te_xy,
+            color='#882255',       # teal
+            lw=2,
+            label=f'TE (forcing→sq), p={p_xy:.3f}'
+        )
+        # sq → forcing histogram
+        plt.hist(
+            null_yx, bins=25,
+            color='#88CCEE',       # pink-red
+            alpha=0.7,
+            label='Null TE (sq→forcing)',
+            edgecolor='white'
+        )
+        # sq → forcing empirical line
+        plt.axvline(
+            te_yx,
+            color='#44AA99',       # dark magenta
+            lw=2,
+            label=f'TE (sq→forcing), p={p_yx:.3f}'
+        )
+        # set the line width of spines
+        for spine in plt.gca().spines.values():
+            spine.set_linewidth(1.5)
+
+        plt.xlabel('Transfer Entropy (bits)')
+        plt.ylabel('Count')
+        plt.legend(loc='upper right', frameon=True)
+        plt.tight_layout()
+        plt.show()
+    
+    # Determine unidirectional significance
+    sig_xy = p_xy < p
+    sig_yx = p_yx < p
+    return sig_xy and not sig_yx
+
+
+
+
+
+
+
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from pyinform import transfer_entropy
+
+# def transfer_entropy_surrogate_test(
+#     forcing, sq, k=1,
+#     forcing_bins=4, sq_bins=2,
+#     n_surr=100, p=0.05, if_plot=True, dpi=100
+# ):
+#     """
+#     Test for unidirectional causality using transfer entropy and surrogates.
+    
+#     Parameters
+#     ----------
+#     forcing : array-like
+#         Time series of the driver (e.g., precession).
+#     sq : array-like
+#         Time series of the response (e.g., DO signal).
+#     forcing_bins : int
+#         Number of bins for discretizing 'forcing'.
+#     sq_bins : int
+#         Number of bins for discretizing 'sq'.
+#     n_surr : int
+#         Number of surrogate permutations.
+#     p : float
+#         Significance level threshold (e.g., 0.05).
+#     if_plot : bool
+#         Whether to plot null distributions and empirical TE lines.
+    
+#     Returns
+#     -------
+#     bool
+#         True if TE(forcing→sq) is significant at level p and TE(sq→forcing) is not; otherwise False.
+#     """
+#     # Reverse series
+#     x = np.asarray(forcing)[::-1]
+#     y = np.asarray(sq)[::-1]
+#     # Discretize
+#     xbins = np.histogram_bin_edges(x, bins=forcing_bins)
+#     ybins = np.histogram_bin_edges(y, bins=sq_bins)
+#     x_disc = np.digitize(x, xbins) - 1
+#     y_disc = np.digitize(y, ybins) - 1
+    
+#     # Empirical TE (one-step, history k=5)
+#     te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
+#     te_yx = transfer_entropy(y_disc[:-1], x_disc[1:], k=k)
+    
+#     # Surrogate nulls
+#     null_xy = np.zeros(n_surr)
+#     null_yx = np.zeros(n_surr)
+#     for i in range(n_surr):
+#         xs = np.random.permutation(x_disc)
+#         null_xy[i] = transfer_entropy(xs[:-1], y_disc[1:], k=k)
+#         ys = np.random.permutation(y_disc)
+#         null_yx[i] = transfer_entropy(ys[:-1], x_disc[1:], k=k)
+    
+#     # p-values
+#     p_xy = (np.sum(null_xy >= te_xy) + 1) / (n_surr + 1)
+#     p_yx = (np.sum(null_yx >= te_yx) + 1) / (n_surr + 1)
+    
+#     # Plot if requested
+#     if if_plot:
+#         plt.figure(figsize=(6, 4), dpi=dpi)
+#         # forcing -> sq
+#         plt.hist(null_xy, bins=25, color='lightcoral', alpha=1, label='Null TE (forcing→sq)')
+#         plt.axvline(te_xy, color='red', lw=2, label=f'Empirical TE (forcing→sq), p={p_xy:.3f}')
+#         # sq -> forcing
+#         plt.hist(null_yx, bins=25, color='lightblue', alpha=1, label='Null TE (sq→forcing)')
+#         plt.axvline(te_yx, color='blue', lw=2, label=f'Empirical TE (sq→forcing), p={p_yx:.3f}')
+#         plt.xlabel('Transfer Entropy (bits)')
+#         plt.ylabel('Count')
+#         # plt.title('Surrogate Test for Transfer Entropy')
+#         plt.legend(loc='upper right', frameon=False)
+#         plt.tight_layout()
+#         plt.show()
+    
+#     # Determine unidirectional significance
+#     sig_xy = p_xy < p
+#     sig_yx = p_yx < p
+#     return sig_xy and not sig_yx
 
 
 
