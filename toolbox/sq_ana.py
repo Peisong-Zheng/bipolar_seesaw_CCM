@@ -18,6 +18,57 @@ from itertools import groupby
 from scipy.interpolate import interp1d
 
 
+import numpy as np
+import matplotlib.pyplot as plt
+
+def plot_aic_delta(series):
+    """
+    Compute AIC for histogram bin counts B from 2 to 20,
+    then plot the AIC and delta-AIC as separate figures.
+    """
+    series = np.asarray(series)
+    x_min, x_max = series.min(), series.max()
+    N = series.size
+
+    b_values = np.arange(2, 21)
+    aic_list = []
+
+    for B in b_values:
+        # Build histogram
+        counts, _ = np.histogram(series, bins=B, range=(x_min, x_max))
+        bin_width = (x_max - x_min) / B
+
+        # Compute log-likelihood for nonzero bins
+        positive = counts > 0
+        ll = np.sum(counts[positive] * np.log(counts[positive] / (N * bin_width)))
+
+        # Number of nonempty bins
+        K_nonzero = np.count_nonzero(counts)
+
+        # AIC: -2 * log-likelihood + 2 * (number of parameters)
+        aic = -2 * ll + 2 * (K_nonzero - 1)
+        aic_list.append(aic)
+
+    aic_list = np.array(aic_list)
+    delta_aic = np.diff(aic_list)
+
+    # Plot AIC vs B
+    plt.figure()
+    plt.plot(b_values, aic_list)
+    plt.xlabel('Number of bins B')
+    plt.ylabel('AIC')
+    plt.title('AIC vs Number of bins')
+    plt.show()
+
+    # Plot ΔAIC vs B
+    plt.figure()
+    plt.plot(b_values[1:], delta_aic)
+    plt.xlabel('Number of bins B')
+    plt.ylabel('ΔAIC')
+    plt.title('Delta AIC vs Number of bins')
+    plt.show()
+
+
 
 
 
@@ -38,7 +89,10 @@ def transfer_entropy_surrogate_test(
     y = np.asarray(sq)[::-1]
     # Discretize
     xbins = np.histogram_bin_edges(x, bins=forcing_bins)
+    # ybins = np.histogram_bin_edges(y, bins=sq_bins)
+    # xbins = np.quantile(x, np.linspace(0, 1, forcing_bins))
     ybins = np.histogram_bin_edges(y, bins=sq_bins)
+
     x_disc = np.digitize(x, xbins) - 1
     y_disc = np.digitize(y, ybins) - 1
     
