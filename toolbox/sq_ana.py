@@ -72,6 +72,12 @@ def plot_aic_delta(series):
 
 
 
+
+
+
+
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from pyinform import transfer_entropy
@@ -113,9 +119,10 @@ def transfer_entropy_surrogate_test(
     p_xy = (np.sum(null_xy >= te_xy) + 1) / (n_surr + 1)
     p_yx = (np.sum(null_yx >= te_yx) + 1) / (n_surr + 1)
     
+    fig=[]
     # Plot if requested
     if if_plot:
-        plt.figure(figsize=(5, 3.5), dpi=dpi)
+        fig = plt.figure(figsize=(5, 3.5), dpi=dpi)
 
         # forcing → sq histogram
         plt.hist(
@@ -160,7 +167,7 @@ def transfer_entropy_surrogate_test(
     # Determine unidirectional significance
     sig_xy = p_xy < p
     sig_yx = p_yx < p
-    return sig_xy and not sig_yx
+    return sig_xy and not sig_yx, fig
 
 
 
