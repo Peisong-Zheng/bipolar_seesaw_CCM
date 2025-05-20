@@ -97,6 +97,7 @@ def transfer_entropy_surrogate_test(
     xbins = np.histogram_bin_edges(x, bins=forcing_bins)
     # ybins = np.histogram_bin_edges(y, bins=sq_bins)
     # xbins = np.quantile(x, np.linspace(0, 1, forcing_bins))
+    # xbins = np.quantile(x, np.linspace(0,1,forcing_bins+1))
     ybins = np.histogram_bin_edges(y, bins=sq_bins)
 
     x_disc = np.digitize(x, xbins) - 1
