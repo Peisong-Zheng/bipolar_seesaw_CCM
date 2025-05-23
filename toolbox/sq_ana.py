@@ -1,25 +1,327 @@
 import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
-import matplotlib.pyplot as plt
-
-
-import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 from itertools import groupby
 from scipy.interpolate import interp1d
 from scipy.stats import ttest_ind
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from itertools import groupby
-from scipy.interpolate import interp1d
+from pyinform import transfer_entropy
 
 
-import numpy as np
-import matplotlib.pyplot as plt
+
+
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from pyinform import transfer_entropy
+
+# def local_TE(
+#     df_pre,
+#     df_sq,
+#     forcing_column='pre',
+#     target_column='sq',
+#     time_column='age',
+#     nbins_pre=4,
+#     nbins_target=2
+# ):
+
+#     # --- 1) Extract raw numpy arrays and reverse if needed
+#     pre_raw = df_pre[forcing_column].values
+#     sq_raw  = df_sq[target_column].values
+#     # if you want to reverse time order, uncomment:
+#     pre_raw = pre_raw[::-1]
+#     sq_raw  = sq_raw[::-1]
+    
+#     # --- 2) Discretize
+#     # 2a) forcing: histogram bins
+#     bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+#     pre_disc = np.digitize(pre_raw, bins_pre) - 1
+
+#     # 2b) target: binary threshold at zero
+#     sq_disc = (sq_raw > 0).astype(int)
+    
+#     # --- 3) Compute local transfer entropy
+#     local_te = transfer_entropy(pre_disc, sq_disc, k=1, local=True)
+
+
+#     # --- 4) Set up the figure with two panels
+#     fig = plt.figure(figsize=(12, 4))
+#     gs  = fig.add_gridspec(2, 1, height_ratios=[0.8, 1.6], hspace=0)
+
+#     # Top panel: pre & sq
+#     ax0 = fig.add_subplot(gs[0])
+#     t   = df_pre[time_column].values
+#     t = t[::-1]  # reverse time order if needed
+#     ln1 = ax0.plot(t, pre_raw, label=f'{forcing_column} (raw)')
+#     ax0.set_ylabel(forcing_column)
+#     ax0.tick_params(axis='x', which='both', labelbottom=False)
+#     # reverse x axis
+#     ax0.set_xlim(t[1], t[-1])
+
+#     ax0b = ax0.twinx()
+#     ln2 = ax0b.plot(t, sq_raw, color='C1', label=f'{target_column} (raw)')
+#     ax0b.set_ylabel(target_column)
+#     # reverse x 
+    
+
+#     # combine legends
+#     lns = ln1 + ln2
+#     labs = [l.get_label() for l in lns]
+#     ax0.legend(lns, labs, loc='upper right')
+    
+#     # Bottom panel: local TE
+#     ax1 = fig.add_subplot(gs[1], sharex=ax0)
+#     # TE[0] is undefined (needs prior sample), so plot from index=1
+#     ax1.plot(t[1:], local_te.T, color='C2', label='Local TE')
+#     ax1.set_xlabel(time_column)
+#     ax1.set_ylabel('Local TE (bits)')
+#     ax1.legend(loc='upper right')
+
+#     # set the 
+
+#     # plt.tight_layout()
+#     plt.show()
+
+#     return local_te
+
+
+# def analyze_state_space_TE(
+#     df_pre,
+#     df_sq,
+#     forcing_column='pre',
+#     target_column='sq',
+#     nbins_pre=4,
+#     nbins_sq=2,
+#     use_quantile=False
+# ):
+
+#     # 1) Raw + reverse
+#     pre = df_pre[forcing_column].values[::-1]
+#     sq  = df_sq[target_column].values[::-1]
+
+#     # 2a) Pre into nbins_pre: use linspace so max goes into last bin
+#     x_min, x_max = pre.min(), pre.max()
+#     if use_quantile:
+#         bins_pre = np.quantile(pre, np.linspace(0, 1, nbins_pre+1))
+#     else:
+#         bins_pre = np.linspace(x_min, x_max+1e-10, nbins_pre+1)
+#     # pre_disc = np.digitize(pre, bins_pre, right=True) - 1
+#     pre_disc = np.digitize(pre, bins_pre, right=True) - 1
+#     pre_disc = np.clip(pre_disc, 0, nbins_pre-1)
+
+#     # 2b) Sq into nbins_sq
+#     y_min, y_max = sq.min(), sq.max()
+#     if use_quantile:
+#         bins_sq  = np.quantile(sq, np.linspace(0, 1, nbins_sq+1))
+#     else:
+#         bins_sq = np.linspace(y_min, y_max+1e-10, nbins_sq+1)
+
+#     sq_disc  = np.digitize(sq,  bins_sq,  right=True) - 1
+#     sq_disc  = np.clip(sq_disc,  0, nbins_sq -1)
+
+#     # 3) Local TE
+#     local_te = transfer_entropy(pre_disc, sq_disc, k=1, local=True)
+
+#     # 4) Align
+#     te_arr = local_te.flatten()
+#     N      = pre_disc.size
+#     if te_arr.size == N:
+#         te = te_arr[1:]
+#     elif te_arr.size == N-1:
+#         te = te_arr
+#     else:
+#         raise ValueError(f"Unexpected TE length {te_arr.shape}")
+
+#     x_idx = pre_disc[:-1]
+#     y_idx = sq_disc[:-1]
+
+#     # 5) Clip any stray out-of-bounds indices
+#     x_idx = np.clip(x_idx, 0, nbins_pre-1)
+#     y_idx = np.clip(y_idx, 0, nbins_sq -1)
+
+#     # 6) Build heatmap
+#     heatmap = np.full((nbins_pre, nbins_sq), np.nan)
+#     for i in range(nbins_pre):
+#         for j in range(nbins_sq):
+#             m = (x_idx == i) & (y_idx == j)
+#             if m.any():
+#                 heatmap[i, j] = te[m].mean()
+
+#     # 7) Plot
+#     plt.figure(figsize=(5, 3))
+#     plt.imshow(heatmap.T, origin='lower', aspect='auto',
+#                extent=[0, nbins_pre, 0, nbins_sq])
+#     plt.colorbar(label='Average Local TE (bits)')
+#     plt.xlabel(f'{forcing_column} bin (0…{nbins_pre-1})')
+#     plt.ylabel(f'{target_column} bin (0…{nbins_sq-1})')
+#     plt.title(f'State‐Space TE ({nbins_pre}×{nbins_sq} bins)')
+#     plt.xticks(np.arange(0.5, nbins_pre+0.5), np.arange(nbins_pre))
+#     plt.yticks(np.arange(0.5, nbins_sq+0.5), np.arange(nbins_sq))
+#     plt.tight_layout()
+#     plt.show()
+
+#     # --- 6) Joint & marginal counts
+#     # Clip indices just in case
+#     x_clip = np.clip(x_idx, 0, nbins_pre-1)
+#     y_clip = np.clip(y_idx, 0, nbins_sq-1)
+
+#     joint_counts = np.zeros((nbins_pre, nbins_sq), int)
+#     for xi, yi in zip(x_clip, y_clip):
+#         joint_counts[xi, yi] += 1
+
+#     pre_counts = np.bincount(x_clip, minlength=nbins_pre)
+#     sq_counts  = np.bincount(y_clip, minlength=nbins_sq)
+
+#     print("Joint counts (rows=pre_bin, cols=sq_bin):")
+#     print(joint_counts)
+
+#     print("\nMarginal counts for pre_bins:")
+#     for i, c in enumerate(pre_counts):
+#         print(f"  pre_bin {i}: {c}")
+
+#     print("\nMarginal counts for sq_bins:")
+#     for j, c in enumerate(sq_counts):
+#         label = 'low' if j==0 else 'high'
+#         print(f"  sq {label} ({j}): {c}")
+
+#     # --- 7) Transition probabilities helper
+#     z_idx = sq_disc[1:]  # next-state of sq
+
+#     def transition_probs(i, j):
+#         mask = (x_clip == i) & (y_clip == j)
+#         counts = np.bincount(z_idx[mask], minlength=nbins_sq)
+#         total = counts.sum()
+#         return counts/total if total>0 else np.zeros(nbins_sq), total
+
+#     # lowest-pre (0), lowest-sq (0)
+#     probs_00, total_00 = transition_probs(0, 0)
+#     print(f"\nCell (pre=low, sq=low): {total_00} samples")
+#     print(f"  P(sq_next=0)={probs_00[0]:.3f}, P(sq_next=1)={probs_00[1]:.3f}")
+
+#     # highest-pre (nbins_pre-1), lowest-sq (0)
+#     hp = nbins_pre - 1
+#     probs_h0, total_h0 = transition_probs(hp, 0)
+#     print(f"\nCell (pre=high, sq=low): {total_h0} samples")
+#     print(f"  P(sq_next=0)={probs_h0[0]:.3f}, P(sq_next=1)={probs_h0[1]:.3f}")
+
+#     # Package results
+#     return {
+#         'heatmap': heatmap,
+#         'joint_counts': joint_counts,
+#         'pre_counts': pre_counts,
+#         'sq_counts': sq_counts,
+#         'trans_00': (probs_00, total_00),
+#         'trans_high0': (probs_h0, total_h0),
+#         'te': te,
+#         'x_idx': x_idx,
+#         'y_idx': y_idx
+#     }
+
+
+
+def local_TE(
+    df_pre,
+    df_sq,
+    forcing_column='pre',
+    target_column='sq',
+    time_column='age',
+    nbins_pre=4,
+    nbins_target=2
+):
+
+    # --- 1) Extract raw numpy arrays and reverse if needed
+    pre_raw = df_pre[forcing_column].values[::-1]
+    sq_raw  = df_sq[target_column].values[::-1]
+    t        = df_pre[time_column].values[::-1]
+
+    # pre_raw = df_pre[forcing_column].values
+    # sq_raw  = df_sq[target_column].values
+    # t        = df_pre[time_column].values
+
+    # --- 1.1) Find “low-pre” periods (below 25% quantile)
+    q25   = np.quantile(pre_raw, 0.25)
+    low   = pre_raw < q25
+    # find rising/falling edges of the boolean mask
+    edges = np.diff(low.astype(int))
+    starts = list(np.where(edges == 1)[0] + 1)
+    ends   = list(np.where(edges == -1)[0] + 1)
+    # if it starts low right away
+    if low[0]:
+        starts.insert(0, 0)
+    # if it ends low
+    if low[-1]:
+        ends.append(len(low))
+    # pair them
+    low_periods = list(zip(starts, ends))
+
+    # --- 2) Discretize
+    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+    pre_disc = np.digitize(pre_raw, bins_pre) - 1
+    sq_disc  = (sq_raw > 0).astype(int)
+    
+    # --- 3) Compute local transfer entropy (unchanged)
+    local_te = transfer_entropy(pre_disc, sq_disc, k=1, local=True)
+
+    # --- 4) Plot setup with two panels
+    fig = plt.figure(figsize=(12, 4))
+    gs  = fig.add_gridspec(2, 1, height_ratios=[0.8, 1.6], hspace=0)
+
+    # Top panel: pre & sq
+    ax0 = fig.add_subplot(gs[0])
+    ax0.plot(t, pre_raw, label=f'{forcing_column} (raw)')
+    ax0.set_ylabel(forcing_column)
+    ax0.tick_params(axis='x', which='both', labelbottom=False)
+    ax0.set_xlim(t[1], t[-1])
+    
+    ax0b = ax0.twinx()
+    ax0b.plot(t, sq_raw, color='C1', label=f'{target_column} (raw)')
+    ax0b.set_ylabel(target_column)
+
+    # Shade low-pre on top panel
+    for start, end in low_periods:
+        ax0.axvspan(t[start], t[end-1], color='gray', alpha=0.3)
+        ax0b.axvspan(t[start], t[end-1], color='gray', alpha=0.3)
+
+    # combine legends
+    lns = ax0.get_lines() + ax0b.get_lines()
+    labs = [l.get_label() for l in lns]
+    ax0.legend(lns, labs, loc='upper right')
+    
+    # Bottom panel: local TE
+    ax1 = fig.add_subplot(gs[1], sharex=ax0)
+    ax1.plot(t[1:], local_te.T, color='C2', label='Local TE')
+    ax1.set_xlabel(time_column)
+    ax1.set_ylabel('Local TE (bits)')
+    ax1.legend(loc='upper right')
+
+    # Shade low-pre on bottom panel
+    for start, end in low_periods:
+        ax1.axvspan(t[start], t[end-1], color='gray', alpha=0.3)
+
+    plt.show()
+
+    return local_te
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def plot_aic_delta(series):
     """
