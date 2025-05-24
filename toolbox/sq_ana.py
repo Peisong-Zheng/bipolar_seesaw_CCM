@@ -237,7 +237,7 @@ def local_TE(
     # t        = df_pre[time_column].values
 
     # --- 1.1) Find “low-pre” periods (below 25% quantile)
-    q25   = np.quantile(pre_raw, 0.25)
+    q25   = np.quantile(pre_raw, 0.5)
     low   = pre_raw < q25
     # find rising/falling edges of the boolean mask
     edges = np.diff(low.astype(int))
