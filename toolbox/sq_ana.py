@@ -6,6 +6,428 @@ from scipy.interpolate import interp1d
 from scipy.stats import ttest_ind
 from pyinform import transfer_entropy
 
+from toolbox import sq_ana as sa
+import importlib
+import numpy as np
+import matplotlib.pyplot as plt
+from joblib import Parallel, delayed
+
+
+
+
+
+# reload module in case of updates
+def mc_TE_heatmap_inter(
+    df_sq,
+    target_column='sq',
+    intervals=None,
+    niter=100,
+    n_surr=100,
+    alpha=0.05,
+    k=1,
+    gbins=None,
+    p_thresh=0.9,
+    n_jobs=-1,
+    forcing_var='pre',  # 'pre' or 'obl'
+    if_plot=False,
+    plot=True
+):
+    """
+    Perform Monte Carlo tests of transfer entropy between 'sq' and a chosen forcing variable
+    over a range of interpolation intervals and multiple forcing_bins, then plot a heatmap.
+
+    Parameters
+    ----------
+    df_sq : pandas.DataFrame
+        Input data frame containing 'sq' and forcing variables.
+    intervals : list of int, optional
+        Interpolation intervals to test (default=10,20,...,100).
+    niter : int, optional
+        Number of Monte Carlo repetitions (default=100).
+    n_surr : int, optional
+        Number of surrogates per TE test (default=100).
+    alpha : float, optional
+        Significance level for surrogate test (default=0.05).
+    k : int, optional
+        History length for transfer entropy (default=1).
+    gbins : list of int, optional
+        Forcing bins to test (default=range(2,11)).
+    p_thresh : float, optional
+        Threshold for highlighting cells in heatmap (default=0.9).
+    n_jobs : int, optional
+        Number of parallel jobs (default=-1 for all cores).
+    forcing_var : str, optional
+        Which forcing variable to test: 'pre' or 'obl' (default='pre').
+    if_plot : bool, optional
+        Whether to plot intermediate TE results (default=False).
+    plot : bool, optional
+        Whether to display the heatmap (default=True).
+
+    Returns
+    -------
+    fractions : numpy.ndarray
+        Matrix of fraction significant values (len(intervals) x len(gbins)).
+    fig, ax : matplotlib objects (if plot=True)
+        Heatmap Figure and Axes.
+    """
+    # defaults
+    if intervals is None:
+        intervals = list(range(10, 101, 10))
+    if gbins is None:
+        gbins = list(range(2, 11))
+    if forcing_var not in ('pre', 'obl'):
+        raise ValueError("forcing_var must be 'pre' or 'obl'.")
+
+    # reload toolbox
+    importlib.reload(sa)
+
+    # 1) Prepare data for each interval
+    data_list = []  # list of (forcing, sq) pairs
+    for interval in intervals:
+        df_sq_i, df_pre_i, df_obl_i = sa.interpolate_data_forcing(
+            df_sq.copy(), interval=interval, if_plot=if_plot
+        )
+        if forcing_var == 'pre':
+            forcing = df_pre_i['pre'].values
+        else:
+            forcing = df_obl_i['obl'].values
+        sq_vals = df_sq_i[target_column].values
+        data_list.append((forcing, sq_vals))
+
+    # 2) Worker for one MC iteration
+    def one_mc_iter(data_list, gbins, n_surr, alpha, k):
+        counts = np.zeros((len(data_list), len(gbins)), dtype=int)
+        for i, (forcing, sq_vals) in enumerate(data_list):
+            for j, bins in enumerate(gbins):
+                sig, _ = sa.transfer_entropy_surrogate_test(
+                    forcing, sq_vals,
+                    k=k,
+                    forcing_bins=bins,
+                    n_surr=n_surr,
+                    p=alpha,
+                    if_plot=False
+                )
+                counts[i, j] = int(sig)
+        return counts
+
+    # 3) Parallel Monte Carlo
+    results = Parallel(n_jobs=n_jobs, backend='loky')(
+        delayed(one_mc_iter)(data_list, gbins, n_surr, alpha, k)
+        for _ in range(niter)
+    )
+    total = np.stack(results).sum(axis=0)
+    fractions = total / niter
+
+    # 4) Plot
+    if plot:
+        fig, ax = plt.subplots(figsize=(8, 4))
+        im = ax.imshow(fractions, origin='lower', aspect='auto', cmap='viridis', vmin=0, vmax=1)
+        ax.set_xticks(np.arange(len(gbins)))
+        ax.set_xticklabels(gbins)
+        ax.set_xlabel('forcing_bins')
+        ax.set_yticks(np.arange(len(intervals)))
+        ax.set_yticklabels(intervals)
+        ax.set_ylabel('interpolation interval')
+        ax.set_title(f'TE(signif) for sq vs {forcing_var} across intervals')
+        cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label('Fraction significant')
+        # highlight
+        for i, j in zip(*np.where(fractions > p_thresh)):
+            rect = plt.Rectangle((j-0.5, i-0.5),1,1, fill=False, edgecolor='white', linewidth=2)
+            ax.add_patch(rect)
+        # annotate
+        for i in range(len(intervals)):
+            for j in range(len(gbins)):
+                pct = fractions[i, j] * 100
+                color = 'white' if fractions[i, j] > 0.5 else 'black'
+                ax.text(j, i, f"{pct:.0f}%", ha='center', va='center', color=color, fontsize=8)
+        plt.tight_layout()
+        plt.show()
+        return fractions, fig, ax
+
+    return fractions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# # reload module in case of updates
+# def mc_TE_heatmap_inter(
+#     df_sq,
+#     intervals=None,
+#     niter=100,
+#     n_surr=100,
+#     alpha=0.05,
+#     k=1,
+#     gbins=None,
+#     p_thresh=0.9,
+#     n_jobs=-1,
+#     if_plot=False,
+#     plot=True
+# ):
+#     """
+#     Perform Monte Carlo tests of transfer entropy over a range of interpolation intervals for forcing data and
+#     multiple forcing_bins, then plot a heatmap of fraction significant.
+
+#     Parameters
+#     ----------
+#     df_sq : pandas.DataFrame
+#         Input 'sq' data frame (time series to predict).
+#     intervals : list of int, optional
+#         Interpolation intervals to test (default=10,20,...,100).
+#     niter : int, optional
+#         Number of Monte Carlo repetitions (default=100).
+#     n_surr : int, optional
+#         Number of surrogates per TE test (default=100).
+#     alpha : float, optional
+#         Significance level for surrogate test (default=0.05).
+#     k : int, optional
+#         History length for transfer entropy (default=1).
+#     gbins : list of int, optional
+#         Forcing bins to test (default=range(2,11)).
+#     p_thresh : float, optional
+#         Threshold for highlighting cells in heatmap (default=0.9).
+#     n_jobs : int, optional
+#         Number of parallel jobs for computation (default=-1 for all cores).
+#     if_plot : bool, optional
+#         Whether to plot intermediate TE results (default=False).
+#     plot : bool, optional
+#         Whether to display the heatmap (default=True).
+
+#     Returns
+#     -------
+#     fractions : numpy.ndarray
+#         Matrix of fraction significant values of shape (len(intervals), len(gbins)).
+#     fig, ax : matplotlib objects (if plot=True)
+#         Figure and axes of the heatmap.
+#     """
+#     # default parameters
+#     if intervals is None:
+#         intervals = list(range(10, 101, 10))
+#     if gbins is None:
+#         gbins = list(range(2, 11))
+
+#     # reload in case of changes
+#     importlib.reload(sa)
+
+#     # 1) Prepare data for each interval
+#     pre_sq_list = []  # list of (pre, sq) tuples
+#     for interval in intervals:
+#         df_sq_i, df_pre_i, _ = sa.interpolate_data_forcing(
+#             df_sq.copy(), interval=interval, if_plot=if_plot
+#         )
+#         pre_sq_list.append((df_pre_i['pre'].values, df_sq_i['sq'].values))
+
+#     # 2) Worker for one MC iteration across intervals and gbins
+#     def one_mc_iter(pre_sq_list, gbins, n_surr, alpha, k):
+#         local_counts = np.zeros((len(pre_sq_list), len(gbins)), dtype=int)
+#         for i, (pre, sq) in enumerate(pre_sq_list):
+#             for j, b in enumerate(gbins):
+#                 sig, _ = sa.transfer_entropy_surrogate_test(
+#                     pre, sq,
+#                     k=k,
+#                     forcing_bins=b,
+#                     n_surr=n_surr,
+#                     p=alpha,
+#                     if_plot=False
+#                 )
+#                 local_counts[i, j] = int(sig)
+#         return local_counts
+
+#     # 3) Parallel Monte Carlo
+#     results = Parallel(n_jobs=n_jobs, backend="loky")(  
+#         delayed(one_mc_iter)(pre_sq_list, gbins, n_surr, alpha, k)
+#         for _ in range(niter)
+#     )
+#     total_counts = np.stack(results, axis=0).sum(axis=0)
+#     fractions = total_counts / niter
+
+#     # 4) Plot heatmap
+#     if plot:
+#         fig, ax = plt.subplots(figsize=(8, 4))
+#         im = ax.imshow(
+#             fractions,
+#             origin='lower',
+#             aspect='auto',
+#             cmap='viridis',
+#             vmin=0, vmax=1
+#         )
+#         ax.set_xticks(np.arange(len(gbins)))
+#         ax.set_xticklabels(gbins)
+#         ax.set_xlabel('forcing_bins')
+#         ax.set_yticks(np.arange(len(intervals)))
+#         ax.set_yticklabels(intervals)
+#         ax.set_ylabel('interpolation interval')
+#         ax.set_title(f'Fraction significant over {niter} Monte Carlo runs')
+#         cbar = fig.colorbar(im, ax=ax)
+#         cbar.set_label('Fraction significant')
+#         # white boxes where above threshold
+#         for i, j in zip(*np.where(fractions > p_thresh)):
+#             rect = plt.Rectangle(
+#                 (j - 0.5, i - 0.5), 1, 1,
+#                 fill=False, edgecolor='white', linewidth=2
+#             )
+#             ax.add_patch(rect)
+#         # annotate percentages
+#         for i in range(len(intervals)):
+#             for j in range(len(gbins)):
+#                 pct = fractions[i, j] * 100
+#                 color = 'white' if fractions[i, j] > 0.5 else 'black'
+#                 ax.text(j, i, f"{pct:.0f}%", ha='center', va='center',
+#                         color=color, fontsize=8)
+#         plt.tight_layout()
+#         plt.show()
+#         return fractions, fig, ax
+
+#     return fractions
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# reload module in case of updates
+def mc_TE_heatmap(
+    pre,
+    sq,
+    niter=100,
+    n_surr=100,
+    alpha=0.05,
+    ks=None,
+    gbins=None,
+    p_thresh=0.9,
+    n_jobs=-1,
+    if_plot=False,
+    plot=True
+):
+
+    # default parameter lists
+    if ks is None:
+        ks = [1, 2, 3, 4, 5, 6]
+    if gbins is None:
+        gbins = list(range(2, 11))
+
+
+    # 2) Worker for one MC iteration
+    def one_mc_iter(pre, sq, ks, gbins, n_surr, alpha):
+        local_counts = np.zeros((len(ks), len(gbins)), dtype=int)
+        for i, k in enumerate(ks):
+            for j, b in enumerate(gbins):
+                sig, _ = transfer_entropy_surrogate_test(
+                    pre, sq,
+                    k=k,
+                    forcing_bins=b,
+                    n_surr=n_surr,
+                    p=alpha,
+                    if_plot=False
+                )
+                local_counts[i, j] = int(sig)
+        return local_counts
+
+    # 3) Parallel Monte Carlo
+    results = Parallel(n_jobs=n_jobs, backend="loky")(  
+        delayed(one_mc_iter)(pre, sq, ks, gbins, n_surr, alpha)
+        for _ in range(niter)
+    )
+    total_counts = np.stack(results, axis=0).sum(axis=0)
+    fractions = total_counts / niter
+
+    # 4) Plot heatmap
+    if plot:
+        fig, ax = plt.subplots(figsize=(8, 4))
+        im = ax.imshow(
+            fractions,
+            origin='lower',
+            aspect='auto',
+            cmap='viridis',
+            vmin=0, vmax=1
+        )
+        ax.set_xticks(np.arange(len(gbins)))
+        ax.set_xticklabels(gbins)
+        ax.set_xlabel('forcing_bins')
+        ax.set_yticks(np.arange(len(ks)))
+        ax.set_yticklabels(ks)
+        ax.set_ylabel('history length k')
+        ax.set_title(f'Fraction significant over {niter} Monte Carlo runs')
+        cbar = fig.colorbar(im, ax=ax)
+        cbar.set_label('Fraction significant')
+        # white boxes where above threshold
+        for i, j in zip(*np.where(fractions > p_thresh)):
+            rect = plt.Rectangle(
+                (j - 0.5, i - 0.5), 1, 1,
+                fill=False, edgecolor='white', linewidth=2
+            )
+            ax.add_patch(rect)
+        # annotate
+        for i in range(len(ks)):
+            for j in range(len(gbins)):
+                pct = fractions[i, j] * 100
+                color = 'white' if fractions[i, j] > 0.5 else 'black'
+                ax.text(j, i, f"{pct:.0f}%", ha='center', va='center',
+                        color=color, fontsize=8)
+        plt.tight_layout()
+        plt.show()
+        return fractions, fig, ax
+
+    return fractions
 
 
 
@@ -217,6 +639,134 @@ from pyinform import transfer_entropy
 
 
 
+import numpy as np
+import matplotlib.pyplot as plt
+
+def moving_TE(
+    df_pre,
+    df_sq,
+    forcing_column='pre',
+    target_column='sq',
+    time_column='age',
+    nbins_pre=4,
+    nbins_target=2,
+    window_length=500,
+):
+    # --- 1) Extract raw numpy arrays and reverse if needed
+    pre_raw = df_pre[forcing_column].values[::-1]
+    sq_raw  = df_sq[target_column].values[::-1]
+    t        = df_pre[time_column].values[::-1]
+    N = len(pre_raw)
+
+    # --- 1.1) Find “low-pre” periods (below median here)
+    q25   = np.quantile(pre_raw, 0.5)
+    low   = pre_raw < q25
+    edges = np.diff(low.astype(int))
+    starts = list(np.where(edges == 1)[0] + 1)
+    ends   = list(np.where(edges == -1)[0] + 1)
+    if low[0]:   starts.insert(0, 0)
+    if low[-1]:  ends.append(N)
+    low_periods = list(zip(starts, ends))
+
+    # --- 2) Discretize once, globally
+    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+    pre_disc = np.digitize(pre_raw, bins_pre) - 1
+    sq_disc  = (sq_raw > 0).astype(int)
+
+    # --- 3) Compute local TE in a moving window
+    local_te = np.full(N, np.nan)
+    for i in range(1, N):
+        start = max(0, i - window_length + 1)
+        # counts for this window
+        c_xyz = {}
+        c_xy  = {}
+        c_zy  = {}
+        c_z   = {}
+
+        # collect counts from j=start+1 .. i
+        for j in range(start+1, i+1):
+            x_t   = sq_disc[j]
+            x_tm1 = sq_disc[j-1]
+            y_tm1 = pre_disc[j-1]
+
+            c_xyz[(x_t, x_tm1, y_tm1)] = c_xyz.get((x_t, x_tm1, y_tm1), 0) + 1
+            c_xy[(x_t, x_tm1)]         = c_xy.get((x_t, x_tm1), 0) + 1
+            c_zy[(x_tm1, y_tm1)]       = c_zy.get((x_tm1, y_tm1), 0) + 1
+            c_z[x_tm1]                 = c_z.get(x_tm1, 0) + 1
+
+        x_t   = sq_disc[i]
+        x_tm1 = sq_disc[i-1]
+        y_tm1 = pre_disc[i-1]
+
+        # only compute if we've seen that history in this window
+        if c_zy.get((x_tm1, y_tm1), 0) > 0 and c_z.get(x_tm1, 0) > 0:
+            num = c_xyz[(x_t, x_tm1, y_tm1)] / c_zy[(x_tm1, y_tm1)]
+            den = c_xy[(x_t, x_tm1)]         / c_z[x_tm1]
+            local_te[i] = np.log2(num / den)
+
+    # --- 4) Plot setup with two panels
+    fig = plt.figure(figsize=(12, 4))
+    gs  = fig.add_gridspec(2, 1, height_ratios=[0.8, 1.6], hspace=0)
+
+    # Top panel: pre & sq
+    ax0 = fig.add_subplot(gs[0])
+    ax0.plot(t, pre_raw, label=f'{forcing_column} (raw)')
+    ax0.set_ylabel(forcing_column)
+    ax0.tick_params(axis='x', which='both', labelbottom=False)
+    ax0.set_xlim(t[1], t[-1])
+
+    ax0b = ax0.twinx()
+    ax0b.plot(t, sq_raw, color='C1', linestyle='-', marker='', label=f'{target_column} (raw)')
+    ax0b.set_ylabel(target_column)
+
+    # Shade low-pre
+    for start, end in low_periods:
+        ax0.axvspan(t[start], t[end-1], color='gray', alpha=0.3)
+        ax0b.axvspan(t[start], t[end-1], color='gray', alpha=0.3)
+
+    # Draw bin boundaries as horizontal lines
+    for y in bins_pre:
+        ax0.axhline(y=y, color='k', linestyle='--', alpha=0.5)
+
+    # combine legends
+    # lns = ax0.get_lines() + ax0b.get_lines()
+    # labs = [l.get_label() for l in lns]
+    # ax0.legend(lns, labs, loc='upper right')
+
+    all_lines = ax0.get_lines() + ax0b.get_lines()
+    good_lines = [line for line in all_lines if not line.get_label().startswith('_')]
+    good_labels = [line.get_label() for line in good_lines]
+    ax0.legend(good_lines, good_labels, loc='upper right')
+
+    # Bottom panel: local TE
+    ax1 = fig.add_subplot(gs[1], sharex=ax0)
+    ax1.plot(t, np.concatenate([[np.nan], local_te[1:]]), color='C2', label='Local TE')
+    ax1.set_xlabel(time_column)
+    ax1.set_ylabel('Local TE (bits)')
+    ax1.legend(loc='upper right')
+
+    # Shade low-pre on bottom panel
+    for start, end in low_periods:
+        ax1.axvspan(t[start], t[end-1], color='gray', alpha=0.3)
+
+    plt.show()
+
+    return local_te
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def local_TE(
     df_pre,
     df_sq,
@@ -323,10 +873,62 @@ def local_TE(
 
 
 
+# def plot_aic_delta(series):
+#     """
+#     Compute AIC for histogram bin counts B from 2 to 20,
+#     then plot the AIC and delta-AIC as separate figures.
+#     """
+#     series = np.asarray(series)
+#     x_min, x_max = series.min(), series.max()
+#     N = series.size
+
+#     b_values = np.arange(2, 21)
+#     aic_list = []
+
+#     for B in b_values:
+#         # Build histogram
+#         counts, _ = np.histogram(series, bins=B, range=(x_min, x_max))
+#         bin_width = (x_max - x_min) / B
+
+#         # Compute log-likelihood for nonzero bins
+#         positive = counts > 0
+#         ll = np.sum(counts[positive] * np.log(counts[positive] / (N * bin_width)))
+
+#         # Number of nonempty bins
+#         K_nonzero = np.count_nonzero(counts)
+
+#         # AIC: -2 * log-likelihood + 2 * (number of parameters)
+#         aic = -2 * ll + 2 * (K_nonzero - 1)
+#         aic_list.append(aic)
+
+#     aic_list = np.array(aic_list)
+#     delta_aic = np.diff(aic_list)
+
+#     # Plot AIC vs B
+#     plt.figure()
+#     plt.plot(b_values, aic_list)
+#     plt.xlabel('Number of bins B')
+#     plt.ylabel('AIC')
+#     plt.title('AIC vs Number of bins')
+#     plt.show()
+
+#     # Plot ΔAIC vs B
+#     plt.figure()
+#     plt.plot(b_values[1:], delta_aic)
+#     plt.xlabel('Number of bins B')
+#     plt.ylabel('ΔAIC')
+#     plt.title('Delta AIC vs Number of bins')
+#     plt.show()
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
 def plot_aic_delta(series):
     """
     Compute AIC for histogram bin counts B from 2 to 20,
-    then plot the AIC and delta-AIC as separate figures.
+    then plot both AIC and ΔAIC on a single figure using a twin y-axis,
+    with integer x-ticks, markers, grid, and a larger figure size.
     """
     series = np.asarray(series)
     x_min, x_max = series.min(), series.max()
@@ -336,39 +938,43 @@ def plot_aic_delta(series):
     aic_list = []
 
     for B in b_values:
-        # Build histogram
         counts, _ = np.histogram(series, bins=B, range=(x_min, x_max))
         bin_width = (x_max - x_min) / B
-
-        # Compute log-likelihood for nonzero bins
         positive = counts > 0
         ll = np.sum(counts[positive] * np.log(counts[positive] / (N * bin_width)))
-
-        # Number of nonempty bins
         K_nonzero = np.count_nonzero(counts)
-
-        # AIC: -2 * log-likelihood + 2 * (number of parameters)
         aic = -2 * ll + 2 * (K_nonzero - 1)
         aic_list.append(aic)
 
     aic_list = np.array(aic_list)
     delta_aic = np.diff(aic_list)
 
-    # Plot AIC vs B
-    plt.figure()
-    plt.plot(b_values, aic_list)
-    plt.xlabel('Number of bins B')
-    plt.ylabel('AIC')
-    plt.title('AIC vs Number of bins')
+    # Create figure and axes
+    fig, ax1 = plt.subplots(figsize=(7, 4))
+    ax2 = ax1.twinx()
+
+    # Plot AIC
+    ax1.plot(b_values, aic_list, marker='o', linestyle='-', label='AIC')
+    ax1.set_xlabel('Number of bins B')
+    ax1.set_ylabel('AIC')
+    ax1.set_xticks(b_values)
+    ax1.grid(True)
+
+    # Plot ΔAIC
+    ax2.plot(b_values[1:], delta_aic, color='red', marker='s', linestyle='--', label='ΔAIC')
+    ax2.set_ylabel('ΔAIC')
+
+    # Legends
+    lines_1, labels_1 = ax1.get_legend_handles_labels()
+    lines_2, labels_2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='best')
+
+    # plt.title('AIC and ΔAIC vs Number of bins')
+    plt.tight_layout()
     plt.show()
 
-    # Plot ΔAIC vs B
-    plt.figure()
-    plt.plot(b_values[1:], delta_aic)
-    plt.xlabel('Number of bins B')
-    plt.ylabel('ΔAIC')
-    plt.title('Delta AIC vs Number of bins')
-    plt.show()
+
+
 
 
 
@@ -387,7 +993,7 @@ from pyinform import transfer_entropy
 def transfer_entropy_surrogate_test(
     forcing, sq, k=1,
     forcing_bins=4, sq_bins=2,
-    n_surr=100, p=0.05, if_plot=True, dpi=100
+    n_surr=100, p=0.05, use_quantile=False, if_plot=True, dpi=100
 ):
     """
     Test for unidirectional causality using transfer entropy and surrogates.
@@ -396,11 +1002,14 @@ def transfer_entropy_surrogate_test(
     x = np.asarray(forcing)[::-1]
     y = np.asarray(sq)[::-1]
     # Discretize
-    xbins = np.histogram_bin_edges(x, bins=forcing_bins)
-    # ybins = np.histogram_bin_edges(y, bins=sq_bins)
-    # xbins = np.quantile(x, np.linspace(0, 1, forcing_bins))
-    # xbins = np.quantile(x, np.linspace(0,1,forcing_bins+1))
-    ybins = np.histogram_bin_edges(y, bins=sq_bins)
+    if use_quantile:
+        xbins = np.quantile(x, np.linspace(0, 1, forcing_bins+1))
+        ybins = np.quantile(y, np.linspace(0, 1, sq_bins+1))
+    else:
+        xbins = np.histogram_bin_edges(x, bins=forcing_bins)
+        # ybins = np.histogram_bin_edges(y, bins=sq_bins)
+
+        ybins = np.histogram_bin_edges(y, bins=sq_bins)
 
     x_disc = np.digitize(x, xbins) - 1
     y_disc = np.digitize(y, ybins) - 1
