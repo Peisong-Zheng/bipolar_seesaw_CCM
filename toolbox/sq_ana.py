@@ -986,14 +986,239 @@ def plot_aic_delta(series):
 
 
 
+
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from pyinform import transfer_entropy
 
+def transfer_entropy_surrogate_test_v2(
+    forcing, sq, k=1,
+    forcing_bins=4, sq_bins=2,
+    n_surr=100, p=0.05, use_quantile=False,
+    if_plot=True, dpi=100
+):
+    """
+    Test for unidirectional causality using transfer entropy and phase-randomized surrogates of `sq`.
+    """
+    # Reverse series
+    x = np.asarray(forcing)[::-1]
+    y = np.asarray(sq)[::-1]
+
+    # Discretize data
+    if use_quantile:
+        xbins = np.quantile(x, np.linspace(0, 1, forcing_bins + 1))
+        ybins = np.quantile(y, np.linspace(0, 1, sq_bins + 1))
+    else:
+        xbins = np.histogram_bin_edges(x, bins=forcing_bins)
+        ybins = np.histogram_bin_edges(y, bins=sq_bins)
+
+    x_disc = np.digitize(x, xbins) - 1
+    y_disc = np.digitize(y, ybins) - 1
+
+    # Empirical TE
+    te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
+    te_yx = transfer_entropy(y_disc[:-1], x_disc[1:], k=k)
+
+    # Surrogate nulls via phase randomization of `y`
+    null_xy = np.zeros(n_surr)
+    null_yx = np.zeros(n_surr)
+    N = len(y)
+    # compute FFT once for original magnitude
+    y_fft_orig = np.fft.rfft(y)
+    mag = np.abs(y_fft_orig)
+    for i in range(n_surr):
+        # randomize phases
+        phases = np.angle(y_fft_orig)
+        random_phases = np.random.uniform(0, 2*np.pi, size=phases.shape)
+        # preserve DC and Nyquist (if present)
+        random_phases[0] = phases[0]
+        if N % 2 == 0:
+            random_phases[-1] = phases[-1]
+        # build surrogate frequency domain
+        y_surr_fft = mag * np.exp(1j * random_phases)
+        # inverse FFT
+        y_surr = np.fft.irfft(y_surr_fft, n=N)
+        # discretize surrogate
+        y_surr_disc = np.digitize(y_surr, ybins) - 1
+        # compute TE for surrogate
+        null_xy[i] = transfer_entropy(x_disc[:-1], y_surr_disc[1:], k=k)
+        null_yx[i] = transfer_entropy(y_surr_disc[:-1], x_disc[1:], k=k)
+
+    # p-values
+    p_xy = (np.sum(null_xy >= te_xy) + 1) / (n_surr + 1)
+    p_yx = (np.sum(null_yx >= te_yx) + 1) / (n_surr + 1)
+
+    fig = None
+    if if_plot:
+        fig = plt.figure(figsize=(5, 3.5), dpi=dpi)
+        plt.hist(null_xy, bins=25, alpha=0.7, label='Null TE (forcing→sq)', edgecolor='white', color = 'darkred')
+        plt.axvline(te_xy, lw=2, label=f'TE (forcing→sq), p={p_xy:.3f}', color='darkred')
+        plt.hist(null_yx, bins=25, alpha=0.7, label='Null TE (sq→forcing)', edgecolor='white', color = 'skyblue')
+        plt.axvline(te_yx, lw=2, label=f'TE (sq→forcing), p={p_yx:.3f}', color='skyblue')
+        plt.xlabel('Transfer Entropy (bits)')
+        plt.ylabel('Count')
+        plt.legend(loc='upper right', frameon=True)
+        plt.tight_layout()
+        plt.show()
+
+    # significance
+    sig_xy = p_xy < p
+    sig_yx = p_yx < p
+    return sig_xy and not sig_yx, fig
+
+
+
+
+
+
+
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from npeet.entropy_estimators import cmi  # KSG-based conditional MI estimator
+
+# def transfer_entropy_surrogate_test_KSG(
+#     forcing, sq, k=1,
+#     n_surr=100, p=0.05,
+#     if_plot=True, dpi=100
+# ):
+#     """
+#     Test for unidirectional causality using a KSG (nearest-neighbor) estimator of transfer entropy
+#     with surrogate testing via phase-randomization of `sq`.
+#     """
+#     # Reverse series (to align with pyinform convention)
+#     x = np.asarray(forcing)[::-1]
+#     y = np.asarray(sq)[::-1]
+#     N = len(x)
+
+#     # Build embedded vectors
+#     # For each time t from k to N-2 (to have y_future at t+1)
+#     X_past = np.stack([x[i:N-1-k+i] for i in range(k+1)], axis=1)
+#     # X_past includes x_t, x_{t-1},...,x_{t-k}
+#     Y_past = np.stack([y[i:N-1-k+i] for i in range(k+1)], axis=1)
+#     # Y_past includes y_t, y_{t-1},...,y_{t-k}
+#     Y_future = y[k+1:]
+
+#     # Empirical TE via KSG: TE(X->Y) = CMI([X_past], Y_future | Y_past)
+#     te_xy = cmi(X_past, Y_future.reshape(-1,1), Y_past, k=k)
+#     te_yx = cmi(Y_past, x[k+1:].reshape(-1,1), X_past, k=k)
+
+#     # Surrogate null distributions
+#     null_xy = np.zeros(n_surr)
+#     null_yx = np.zeros(n_surr)
+#     # precompute FFT magnitude and phases for y
+#     y_fft = np.fft.rfft(y)
+#     mag = np.abs(y_fft)
+#     phases = np.angle(y_fft)
+#     for i in range(n_surr):
+#         # phase-randomize y
+#         rnd_phases = np.random.uniform(0, 2*np.pi, size=phases.shape)
+#         rnd_phases[0] = phases[0]
+#         if N % 2 == 0:
+#             rnd_phases[-1] = phases[-1]
+#         y_surr = np.fft.irfft(mag * np.exp(1j * rnd_phases), n=N)
+
+#         # embed surrogate
+#         Yp_surr = np.stack([y_surr[j:N-1-k+j] for j in range(k+1)], axis=1)
+#         Yf_surr = y_surr[k+1:]
+
+#         # compute surrogate TE
+#         null_xy[i] = cmi(X_past, Yf_surr.reshape(-1,1), Yp_surr, k=k)
+#         null_yx[i] = cmi(Yp_surr, x[k+1:].reshape(-1,1), X_past, k=k)
+
+#     # p-values
+#     p_xy = (np.sum(null_xy >= te_xy) + 1) / (n_surr + 1)
+#     p_yx = (np.sum(null_yx >= te_yx) + 1) / (n_surr + 1)
+
+#     fig = None
+#     if if_plot:
+#         fig = plt.figure(figsize=(5, 3.5), dpi=dpi)
+#         plt.hist(null_xy, bins=25, alpha=0.7, label='Null TE (forcing→sq)')
+#         plt.axvline(te_xy, lw=2, label=f'TE_KSG (forcing→sq), p={p_xy:.3f}')
+#         plt.hist(null_yx, bins=25, alpha=0.7, label='Null TE (sq→forcing)')
+#         plt.axvline(te_yx, lw=2, label=f'TE_KSG (sq→forcing), p={p_yx:.3f}')
+#         plt.xlabel('Transfer Entropy (nats)')
+#         plt.ylabel('Count')
+#         plt.legend(loc='upper right')
+#         plt.tight_layout()
+#         plt.show()
+
+#     sig_xy = (p_xy < p)
+#     sig_yx = (p_yx < p)
+#     return sig_xy and not sig_yx, fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from pyinform import transfer_entropy
+from sklearn.cluster import KMeans
+
 def transfer_entropy_surrogate_test(
     forcing, sq, k=1,
     forcing_bins=4, sq_bins=2,
-    n_surr=100, p=0.05, use_quantile=False, if_plot=True, dpi=100
+    n_surr=100, p=0.05, 
+    sq_method='hist',  # options: 'hist', 'quantile', 'kmeans'
+    if_plot=True, dpi=100
 ):
     """
     Test for unidirectional causality using transfer entropy and surrogates.
@@ -1001,18 +1226,29 @@ def transfer_entropy_surrogate_test(
     # Reverse series
     x = np.asarray(forcing)[::-1]
     y = np.asarray(sq)[::-1]
-    # Discretize
-    if use_quantile:
-        xbins = np.quantile(x, np.linspace(0, 1, forcing_bins+1))
-        ybins = np.quantile(y, np.linspace(0, 1, sq_bins+1))
-    else:
-        xbins = np.histogram_bin_edges(x, bins=forcing_bins)
-        # ybins = np.histogram_bin_edges(y, bins=sq_bins)
 
+
+    # Discretize sq series
+    if sq_method == 'quantile':
+        ybins = np.quantile(y, np.linspace(0, 1, sq_bins + 1))
+        y_disc = np.digitize(y, ybins) - 1
+    elif sq_method == 'hist':
         ybins = np.histogram_bin_edges(y, bins=sq_bins)
+        y_disc = np.digitize(y, ybins) - 1
 
+    elif sq_method == 'kmeans':
+        # Fit k-means on the values
+        km = KMeans(n_clusters=sq_bins, n_init=10, random_state=0)
+        y_disc = km.fit_predict(y.reshape(-1, 1))
+    else:
+        raise ValueError(f"Unknown sq_method '{sq_method}'. Use 'hist', 'quantile', or 'kmeans'.")
+
+
+
+
+    xbins = np.histogram_bin_edges(x, bins=forcing_bins)
     x_disc = np.digitize(x, xbins) - 1
-    y_disc = np.digitize(y, ybins) - 1
+
     
     # Empirical TE (one-step, history k)
     te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
