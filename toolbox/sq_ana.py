@@ -2220,7 +2220,7 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
 
 
 
-def create_shift_forcing(df_sq, interval, if_plot=False):
+def create_shift_forcing(df_sq, interval, if_plot=False,shift=-10000):
     """
     Resample the square‐wave and load & resample
     the precession & obliquity forcing to a common age grid.
@@ -2253,8 +2253,8 @@ def create_shift_forcing(df_sq, interval, if_plot=False):
     df_pre_raw.columns = ['age','pre']
     df_obl_raw.columns = ['age','obl']
 
-    df_pre_raw['age'] = df_pre_raw['age'].values + 30000
-    df_obl_raw['age'] = df_obl_raw['age'].values + 30000
+    df_pre_raw['age'] = df_pre_raw['age'].values + shift
+    df_obl_raw['age'] = df_obl_raw['age'].values + shift
 
 
     # 2) compute overlapping age bounds
