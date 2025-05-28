@@ -2220,6 +2220,135 @@ def build_DO_sq(df, column_name='none', age_start=0, age_end=641260, extra_sm=5,
 
 
 
+def create_shift_forcing(df_sq, interval, if_plot=False):
+    """
+    Resample the square‐wave and load & resample
+    the precession & obliquity forcing to a common age grid.
+
+    Parameters
+    ----------
+    df_sq : pandas.DataFrame
+        Must have columns ['age', 'sq'].
+    interval : float
+        Desired age‐step for the resampled grid.
+    if_plot : bool, default False
+        If True, plots the three resampled series.
+
+    Returns
+    -------
+    df_sq_resampled, df_pre_resampled, df_obl_resampled : DataFrames
+        Each has columns ['age', <variable>] on the same age grid.
+    """
+    # 1) load raw precession & obliquity
+    pre_path = r"D:\VScode\bipolar_seesaw_CCM\inso_data\pre_800_inter100.txt"
+    obl_path = r"D:\VScode\bipolar_seesaw_CCM\inso_data\obl_800_inter100.txt"
+    df_pre_raw = pd.read_csv(pre_path, sep=r'\s+', header=None, engine='python')
+    df_obl_raw = pd.read_csv(obl_path, sep=r'\s+', header=None, engine='python')
+
+    # convert to years & ensure age increasing
+    df_pre_raw.iloc[:,0] = df_pre_raw.iloc[:,0].abs() * 1000
+    df_obl_raw.iloc[:,0] = df_obl_raw.iloc[:,0].abs() * 1000
+    df_pre_raw = df_pre_raw.iloc[::-1].reset_index(drop=True)
+    df_obl_raw = df_obl_raw.iloc[::-1].reset_index(drop=True)
+    df_pre_raw.columns = ['age','pre']
+    df_obl_raw.columns = ['age','obl']
+
+    df_pre_raw['age'] = df_pre_raw['age'].values + 30000
+    df_obl_raw['age'] = df_obl_raw['age'].values + 30000
+
+
+    # 2) compute overlapping age bounds
+    a_min = max(df_sq['age'].min(),
+                df_pre_raw['age'].min(),
+                df_obl_raw['age'].min())
+    a_max = min(df_sq['age'].max(),
+                df_pre_raw['age'].max(),
+                df_obl_raw['age'].max())
+
+    # 3) create unified age vector
+    new_age = np.arange(a_min, a_max + 1, interval)
+
+    # 4) interpolate each series onto new_age
+    def interp(df, col):
+        f = interp1d(df['age'], df[col],
+                     kind='nearest',
+                     bounds_error=False,
+                     fill_value="extrapolate")
+        return f(new_age)
+    
+    column_names = df_sq.columns[1]
+
+    df_sq_rs  = pd.DataFrame({'age': new_age,
+                              column_names: interp(df_sq, column_names)})
+    df_pre_rs = pd.DataFrame({'age': new_age,
+                              'pre': interp(df_pre_raw, 'pre')})
+    df_obl_rs = pd.DataFrame({'age': new_age,
+                              'obl': interp(df_obl_raw, 'obl')})
+
+    # 5) optional plotting
+    if if_plot:
+        fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True, tight_layout=True)
+        axes[0].plot(df_sq_rs['age'],  df_sq_rs[column_names],  color='black', label='sq')
+        axes[1].plot(df_pre_rs['age'], df_pre_rs['pre'], color='blue',  label='pre')
+        axes[2].plot(df_obl_rs['age'], df_obl_rs['obl'], color='green', label='obl')
+        for ax in axes:
+            ax.legend()
+            ax.set_ylabel(ax.get_label())
+        axes[-1].set_xlabel('Age (years)')
+        plt.show()
+
+    return df_sq_rs, df_pre_rs, df_obl_rs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
