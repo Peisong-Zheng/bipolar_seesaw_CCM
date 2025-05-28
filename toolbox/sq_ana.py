@@ -762,6 +762,574 @@ def moving_TE(
 
 
 
+# def count_sq_pre_contexts(sq, pre, nbins_pre=6):
+#     """
+#     Return a 2×nbins_pre table of raw counts for every pair
+#         (sq_t = i , pre_t = j)   with i∈{0,1},  j∈{0,…,nbins_pre-1}.
+
+#     Parameters
+#     ----------
+#     sq : 1-D array-like of shape (N,)
+#         Square-wave (target) time-series; will be binarised as 0/1 by (sq>0).
+#     pre : 1-D array-like of shape (N,)
+#         Forcing time-series (precession, obliquity …); will be binned.
+#     nbins_pre : int, default 6
+#         Number of equal-width amplitude bins for `pre`.
+
+#     Returns
+#     -------
+#     counts : 2-D ndarray  shape (2, nbins_pre)
+#         counts[i, j]  = number of time steps where
+#                         sq_t == i  and  pre_t is in pre-bin j.
+
+#     Also prints the table as a neat Pandas DataFrame.
+#     """
+#     sq = np.asarray(sq).ravel()
+#     pre = np.asarray(pre).ravel()
+#     if sq.shape != pre.shape:
+#         raise ValueError("sq and pre must have the same length")
+
+#     # --- discretise ---
+#     sq_disc  = (sq > 0).astype(int)                       # 0 / 1
+#     bins_pre = np.histogram_bin_edges(pre, bins=nbins_pre)
+#     pre_disc = np.digitize(pre, bins_pre) - 1             # 0 … nbins_pre
+#     pre_disc = np.clip(pre_disc, 0, nbins_pre-1)          # guard overflow
+
+#     # --- count occurrences of (sq_t, pre_t) ---
+#     counts = np.zeros((2, nbins_pre), dtype=int)
+#     for i, j in zip(sq_disc, pre_disc):
+#         counts[i, j] += 1
+
+#     # --- pretty print ---
+#     df = pd.DataFrame(
+#         counts,
+#         index=[r'sq=0', r'sq=1'],
+#         columns=[f'pre={k}' for k in range(nbins_pre)],
+#     )
+#     print(df.to_string())
+#     return counts
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D          # noqa: F401
+from matplotlib import cm, colors
+
+
+def count_sq_pre_contexts_3d(
+    sq, pre, nbins_pre: int = 6, cmap_name: str = "jet"
+):
+    """
+    Count the occurrences of each (sq_t, pre_t-bin) pair and visualise
+    them in a colour-coded 3-D bar chart.
+
+    The colour of every bar is taken from a warm–cold colormap so that
+    taller bars appear brighter/warmer; bars of equal height share the
+    same colour.
+
+    Parameters
+    ----------
+    sq, pre : 1-D array-like (same length)
+        Time-series for the square wave and the forcing (precession, etc.).
+    nbins_pre : int, default 6
+        Number of equal-width bins for the forcing amplitude.
+    cmap_name : str, default "coolwarm"
+        Any Matplotlib colormap name.
+
+    Returns
+    -------
+    counts : ndarray shape (2, nbins_pre)
+    """
+    # --- 0. prep & sanity check -----------------------------------------
+    sq = np.asarray(sq).ravel()
+    pre = np.asarray(pre).ravel()
+    if sq.shape != pre.shape:
+        raise ValueError("sq and pre must have the same length")
+
+    # --- 1. discretise ---------------------------------------------------
+    sq_disc = (sq > 0).astype(int)                     # 0 / 1
+    bins_pre = np.histogram_bin_edges(pre, bins=nbins_pre)
+    pre_disc = np.digitize(pre, bins_pre) - 1          # 0 … nbins_pre
+    pre_disc = np.clip(pre_disc, 0, nbins_pre - 1)
+
+    # --- 2. tally counts[i, j] ------------------------------------------
+    counts = np.zeros((2, nbins_pre), dtype=int)
+    for i, j in zip(sq_disc, pre_disc):
+        counts[i, j] += 1
+
+    # --- 3. pretty-print table ------------------------------------------
+    df = pd.DataFrame(
+        counts,
+        index=[r"sq=0", r"sq=1"],
+        columns=[f"pre={k}" for k in range(nbins_pre)],
+    )
+    print(df.to_string())
+
+    # --- 4. 3-D bar plot -------------------------------------------------
+    fig = plt.figure(figsize=(7.2, 4.8))
+    ax = fig.add_subplot(111, projection="3d")
+
+    # bar positions & sizes
+    _xs, _ys = np.meshgrid(np.arange(nbins_pre), [0, 1])
+    xs = _xs.ravel()
+    ys = _ys.ravel()
+    zs = np.zeros_like(xs)
+    dx = dy = 0.75
+    dz = counts.T.ravel().astype(float)
+
+    # colour mapping (same colour ↔ same height)
+    cmap = cm.get_cmap(cmap_name)
+    norm = colors.Normalize(vmin=dz.min(), vmax=dz.max())
+    bar_colors = cmap(norm(dz))
+
+    ax.bar3d(xs, ys, zs, dx, dy, dz, color=bar_colors, shade=True)
+
+    # axis labelling
+    ax.set_xlabel("pre bin")
+    ax.set_ylabel("sq bin")
+    ax.set_zlabel("counts")
+    ax.set_xticks(np.arange(nbins_pre) + dx / 2)
+    ax.set_xticklabels([f"{k}" for k in range(nbins_pre)])
+    ax.set_yticks([0.4, 1.4])
+    ax.set_yticklabels(["0", "1"])
+
+    # --- 5. add colour-bar without blocking z-tick labels ---------------
+    mappable = cm.ScalarMappable(norm=norm, cmap=cmap)
+    mappable.set_array([])
+    fig.colorbar(
+        mappable,
+        ax=ax,
+        shrink=0.6,
+        pad=0.22,        # push further right so it doesn't overlap z-ticks
+        label="counts",
+    )
+
+    # ax.set_title("3-D context counts: (sq_t, pre_t-bin)")
+    # plt.tight_layout()
+    plt.show()
+
+    return counts
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+def prob_prebins_diffbar(
+    df_pre,
+    df_sq,
+    forcing_column='pre',
+    target_column='sq',
+    time_column='age',
+    nbins_pre=6
+):
+    """
+    For each pre-bin plot a single bar whose height is
+    Δ = P(stay | pre-bin) - P(flip | pre-bin).
+    Positive bars → staying is more likely; negative → flipping.
+    """
+
+    # 1) reverse to chronological order
+    pre_raw = df_pre[forcing_column].values[::-1]
+    sq_raw  = df_sq[target_column].values[::-1]
+
+    # 2) discretise pre
+    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+    pre_disc = np.digitize(pre_raw, bins_pre) - 1
+    pre_disc = np.clip(pre_disc, 0, nbins_pre - 1)
+    sq_disc  = (sq_raw > 0).astype(int)
+
+    # 3) indices at t-1 and t
+    x_idx = pre_disc[:-1]
+    y_idx = sq_disc[:-1]
+    z_idx = sq_disc[1:]
+
+    # 4) tally counts[x_bin, y_prev, z_next]
+    counts = np.zeros((nbins_pre, 2, 2), dtype=int)
+    for xi, yi, zi in zip(x_idx, y_idx, z_idx):
+        counts[xi, yi, zi] += 1
+
+    # 5) aggregate over y_prev
+    N_flip = counts[:, 0, 1] + counts[:, 1, 0]
+    N_stay = counts[:, 0, 0] + counts[:, 1, 1]
+    N_tot  = N_flip + N_stay
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        p_flip = np.divide(N_flip, N_tot, where=N_tot > 0)
+        p_stay = np.divide(N_stay, N_tot, where=N_tot > 0)
+
+    delta = p_stay - p_flip      # this is what we’ll plot
+
+    # 6) bar chart of Δ
+    x = np.arange(nbins_pre)
+    colors = np.where(delta >= 0, 'C3', 'C2')   # greenish if stay>flip, red if flip>stay
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.bar(x, delta, color=colors)
+    ax.axhline(0, color='k', linewidth=0.8)
+    ax.set_xticks(x)
+    ax.set_xlabel('pre bin (0 … {})'.format(nbins_pre - 1))
+    ax.set_ylabel('P(stay) − P(flip)')
+    ax.set_title('Stay-vs-Flip bias per pre-bin')
+    ax.set_ylim(-1.05, 1.05)
+
+    # annotate values
+    for xi, d in enumerate(delta):
+        ax.text(xi, d + 0.03 * np.sign(d), f'{d:+.2f}', ha='center', va='bottom' if d>=0 else 'top')
+
+    plt.tight_layout()
+    plt.show()
+
+    return delta
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def prob_prebins_bar(
+    df_pre,
+    df_sq,
+    forcing_column='pre',
+    target_column='sq',
+    time_column='age',
+    nbins_pre=6
+):
+    # ----- 1) raw series (reverse so age increases to the right) -----
+    pre_raw = df_pre[forcing_column].values[::-1]
+    sq_raw  = df_sq[target_column].values[::-1]
+
+    # ----- 2) discretise -----
+    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+    pre_disc = np.digitize(pre_raw, bins_pre) - 1
+    pre_disc = np.clip(pre_disc, 0, nbins_pre-1)        # guard overflow
+    sq_disc  = (sq_raw > 0).astype(int)                 # 0/1
+
+    # ----- 3) indices for t-1 and t -----
+    x_idx = pre_disc[:-1]
+    y_idx = sq_disc[:-1]
+    z_idx = sq_disc[1:]
+
+    # ----- 4) 3-D count tensor  counts[x_bin, y_prev, z_next] -----
+    counts = np.zeros((nbins_pre, 2, 2), dtype=int)
+    for xi, yi, zi in zip(x_idx, y_idx, z_idx):
+        counts[xi, yi, zi] += 1
+
+    # ----- 5) aggregate over y_prev -----
+    N_flip = counts[:, 0, 1] + counts[:, 1, 0]   # z ≠ y
+    N_stay = counts[:, 0, 0] + counts[:, 1, 1]   # z = y
+    N_tot  = N_flip + N_stay
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        p_flip = np.divide(N_flip, N_tot, where=N_tot > 0)
+        p_stay = np.divide(N_stay, N_tot, where=N_tot > 0)
+
+    # ----- 6) stacked-bar plot -----
+    x = np.arange(nbins_pre)
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.bar(x, p_stay, color='C3', label='stay')
+    ax.bar(x, p_flip, bottom=p_stay, color='C2', label='flip')
+
+    ax.set_xlabel('pre bin (0 … {})'.format(nbins_pre - 1))
+    ax.set_ylabel('probability')
+    ax.set_xticks(x)
+    ax.set_ylim(0.95, 1.02)
+    ax.legend(loc='upper right')
+    ax.set_title('Probability of stay / flip vs. pre bin')
+    plt.tight_layout()
+    plt.show()
+
+    return p_flip, p_stay
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+def local_prob(
+    df_pre,
+    df_sq,
+    forcing_column='pre',
+    target_column='sq',
+    time_column='age',
+    nbins_pre=4,
+    smooth_win=200
+):
+    # 1) raw series (reverse → old→young if needed)
+    pre_raw = df_pre[forcing_column].values[::-1]
+    sq_raw  = df_sq[target_column].values[::-1]
+    t       = df_pre[time_column].values[::-1]
+
+    # 2) mark "low-pre" periods (here: below 50 % quantile as in your code)
+    q50   = np.quantile(pre_raw, 0.5)
+    low   = pre_raw < q50
+    edges = np.diff(low.astype(int))
+    starts = list(np.where(edges == 1)[0] + 1)
+    ends   = list(np.where(edges == -1)[0] + 1)
+    if low[0]:  starts.insert(0, 0)
+    if low[-1]: ends.append(len(low))
+    low_periods = list(zip(starts, ends))
+
+    # 3) discretise
+    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+    pre_disc = np.digitize(pre_raw, bins_pre) - 1        # 0…nbins_pre-1
+    pre_disc = np.clip(pre_disc, 0, nbins_pre-1)
+    sq_disc  = (sq_raw > 0).astype(int)                  # 0/1
+
+    # past indices (length N-1) and future state
+    x_idx = pre_disc[:-1]
+    y_idx = sq_disc[:-1]
+    z_idx = sq_disc[1:]
+
+    # 4) build 3-D count tensor  (pre_bin, sq_prev, sq_next)
+    counts = np.zeros((nbins_pre, 2, 2), dtype=int)
+    for xi, yi, zi in zip(x_idx, y_idx, z_idx):
+        counts[xi, yi, zi] += 1
+
+    # 5) convert to conditional-prob tensor  P(z | x,y)
+    cond_prob = np.zeros_like(counts, dtype=float)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        totals = counts.sum(axis=2, keepdims=True)
+        cond_prob = np.divide(counts, totals,
+                              where=totals>0)          # avoid /0
+
+    # def smooth(arr, win=10):
+    #     """Simple centred moving-average, same length as input."""
+    #     kern = np.ones(win) / win
+    #     return np.convolve(arr, kern, mode='same')
+
+    def smooth(arr, win=10, mode='edge'):
+        """
+        Centre-aligned moving average with correct length for
+        both even and odd window sizes.  Edge values are extended
+        ('edge') or mirrored ('reflect').
+        """
+        arr  = np.asarray(arr)
+        L    = len(arr)
+        left = win // 2               # floor
+        right = win - left - 1        # ensures left+right = win-1
+        arr_p = np.pad(arr, (left, right), mode=mode)
+        kern  = np.ones(win) / win
+        sm    = np.convolve(arr_p, kern, mode='valid')   # length == L
+        return sm
+
+
+
+
+    # 6) time-series of flip / stay probabilities
+    # flip_prob = np.array([cond_prob[x, y, 1-y] for x, y in zip(x_idx, y_idx)])
+    # stay_prob = np.array([cond_prob[x, y,   y ] for x, y in zip(x_idx, y_idx)])
+
+    flip_prob_raw = np.array([cond_prob[x, y, 1-y] for x, y in zip(x_idx, y_idx)])
+    stay_prob_raw = np.array([cond_prob[x, y,   y ] for x, y in zip(x_idx, y_idx)])
+    flip_prob = smooth(flip_prob_raw, win=200)
+    stay_prob = smooth(stay_prob_raw, win=200)
+
+
+    # -------- PLOT --------
+    fig = plt.figure(figsize=(12, 4))
+    gs  = fig.add_gridspec(2, 1, height_ratios=[0.8, 1.6], hspace=0)
+
+    # top: original signals
+    ax0 = fig.add_subplot(gs[0])
+    ax0.plot(t, pre_raw, label=f'{forcing_column} (raw)')
+    ax0.set_ylabel(forcing_column)
+    ax0b = ax0.twinx()
+    ax0b.plot(t, sq_raw, color='C1', label=f'{target_column} (raw)')
+    ax0b.set_ylabel(target_column)
+    # shade low-pre epochs
+    for s, e in low_periods:
+        ax0.axvspan(t[s], t[e-1], color='gray', alpha=0.3)
+        ax0b.axvspan(t[s], t[e-1], color='gray', alpha=0.3)
+    lns = ax0.get_lines() + ax0b.get_lines()
+    ax0.legend(lns, [l.get_label() for l in lns], loc='upper right')
+    ax0.tick_params(axis='x', which='both', labelbottom=False)
+    ax0.set_xlim(t[1], t[-1])
+
+
+    ax1  = fig.add_subplot(gs[1], sharex=ax0)
+
+    # left axis = flip probability
+    ln1, = ax1.plot(t[1:], flip_prob, color='C2', label='P(flip | pre,sq)')
+    ax1.set_ylabel('P(flip)', color='C2')
+    flip_min, flip_max = flip_prob.min(), flip_prob.max()
+    pad = 0.05 * (flip_max - flip_min + 1e-9)
+    ax1.set_ylim(flip_min - pad, flip_max + pad)
+    ax1.tick_params(axis='y', colors='C2')
+
+    # right axis = stay probability
+    ax1b = ax1.twinx()
+    ln2, = ax1b.plot(t[1:], stay_prob, color='C3', label='P(stay | pre,sq)')
+    ax1b.set_ylabel('P(stay)', color='C3')
+    stay_min, stay_max = stay_prob.min(), stay_prob.max()
+    pad = 0.05 * (stay_max - stay_min + 1e-9)
+    ax1b.set_ylim(stay_min - pad, stay_max + pad)
+    ax1b.tick_params(axis='y', colors='C3')
+
+    ax1.set_xlabel(time_column)
+
+    # shade low-pre epochs
+    for s, e in low_periods:
+        ax1 .axvspan(t[s], t[e-1], color='gray', alpha=0.3)
+        ax1b.axvspan(t[s], t[e-1], color='gray', alpha=0.3)
+
+    # combined legend
+    ax1.legend([ln1, ln2], ['P(flip)', 'P(stay)'], loc='upper right')
+
+    return flip_prob, stay_prob
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
