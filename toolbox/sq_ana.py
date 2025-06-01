@@ -154,6 +154,200 @@ def mc_TE_heatmap_inter(
 
 
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from  scipy.signal import butter, filtfilt
+
+
+def bandpass_ch4_d18o(
+    df_ch4_interp,                 # cols: age , ch4   (common grid)
+    df_d18o_interp,                # cols: age , d18O (same grid)
+    *,
+    low_period = 300,              # [yr]  remove > low_period  (low-cut)
+    high_period = 3_000,           # [yr]  remove < high_period (high-cut)
+    butter_order = 4,
+    flip_sign   = False,           # flip δ18O so “warm = high”
+    plot        = True
+):
+    """
+    Butterworth **band-pass** the pre-interpolated CH4 and δ18O series.
+
+    Pass-band = [ 1/high_period  …  1/low_period ]   (Hz)
+
+    Returns
+    -------
+    df_filt_ch4   : DataFrame['age','filt_ch4']
+    df_filt_d18O  : DataFrame['age','filt_d18O']
+    """
+    # ---------- 1. ensure same age axis ----------------
+    ages = df_ch4_interp['age'].values
+    if not np.allclose(ages, df_d18o_interp['age'].values):
+        raise ValueError("df_ch4_interp and df_d18o_interp must share the same age vector")
+
+    ch4_vals  = df_ch4_interp['ch4'].values
+    d18o_vals = df_d18o_interp['d18O'].values
+    if flip_sign:
+        d18o_vals = -d18o_vals
+
+    # ---------- 2. design Butterworth band-pass --------
+    dt = np.median(np.diff(ages))        # yr
+    fs = 1.0 / dt                        # samples per yr
+    # convert periods [yr] → frequencies [Hz]
+    f_low  = 1.0 / high_period           # lower edge (remove slower than this)
+    f_high = 1.0 / low_period            # upper edge (remove faster than this)
+    Wn = np.array([f_low, f_high]) / (fs * 0.5)   # normalised to Nyquist
+
+    if np.any(Wn <= 0) or np.any(Wn >= 1) or Wn[0] >= Wn[1]:
+        raise ValueError("Band edges out of range; check low_period / high_period.")
+
+    b, a = butter(butter_order, Wn, btype='bandpass')
+    filt_ch4  = filtfilt(b, a, ch4_vals)
+    filt_d18o = filtfilt(b, a, d18o_vals)
+
+    # ---------- 3. wrap to DataFrames ------------------
+    df_filt_ch4  = pd.DataFrame({'age': ages, 'filt_ch4' : filt_ch4})
+    df_filt_d18O = pd.DataFrame({'age': ages, 'filt_d18O': filt_d18o})
+
+    # ---------- 4. optional quick plots ----------------
+    if plot:
+        band_lab = f'{low_period//1_000:.1f}–{high_period//1_000:.1f} ka'
+        for name, orig, filt in [
+            ('CH4',  ch4_vals,  filt_ch4),
+            ('δ18O', d18o_vals, filt_d18o)
+        ]:
+            plt.figure(figsize=(10,3))
+            plt.plot(ages, orig, alpha=0.35, label=f'{name} (raw)')
+            plt.plot(ages, filt, lw=1.6,    label=f'{name} ({band_lab} band-pass)')
+            plt.gca().invert_xaxis()
+            plt.xlabel('Age (yr BP)'); plt.ylabel(name)
+            plt.legend(); plt.tight_layout(); plt.show()
+
+    return df_filt_ch4, df_filt_d18O
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.signal import butter, filtfilt
+
+def highpass_ch4_d18O(
+    df_ch4_interp,                 # ← already on common grid; cols: age , ch4
+    df_d18O_interp,                # ← same grid;        cols: age , d18O
+    *,
+    cutoff_period=10_000,          # remove variability slower than this [yr]
+    butter_order=4,
+    flip_sign=False,                # flip δ18O so “warm = high”
+    plot=True
+):
+    """
+    High–pass the pre-interpolated CH4 and δ18O series (> cutoff_period).
+
+    Returns
+    -------
+    df_filt_ch4   : DataFrame[age , filt_ch4]
+    df_filt_d18O  : DataFrame[age , filt_d18O]
+    """
+
+    # -------- 1. sanity: same age grid -----------------
+    ages = df_ch4_interp['age'].values
+    if not np.allclose(ages, df_d18O_interp['age'].values):
+        raise ValueError('df_ch4_interp and df_d18o_interp must share the same age vector')
+
+    ch4_vals  = df_ch4_interp['ch4'].values
+    d18o_vals = df_d18O_interp['d18O'].values
+    if flip_sign:
+        d18o_vals = -d18o_vals
+
+    # -------- 2. Butterworth high-pass -----------------
+    # dt [yr] from median spacing
+    dt = np.median(np.diff(ages))
+    fs = 1.0 / dt                       # samples per year
+    fc = 1.0 / cutoff_period            # Hz
+    Wn = fc / (fs * 0.5)                # normalised to Nyquist
+
+    b, a = butter(butter_order, Wn, btype='highpass')
+    filt_ch4  = filtfilt(b, a, ch4_vals)
+    filt_d18o = filtfilt(b, a, d18o_vals)
+
+    # -------- 3. wrap to DataFrames --------------------
+    df_filt_ch4  = pd.DataFrame({'age': ages, 'filt_ch4' : filt_ch4})
+    df_filt_d18O = pd.DataFrame({'age': ages, 'filt_d18O': filt_d18o})
+
+    # -------- 4. quick visual check -------------------
+    if plot:
+        for name, orig, filt in [
+            ('CH4',  ch4_vals,  filt_ch4),
+            ('δ18O', d18o_vals, filt_d18o)
+        ]:
+            plt.figure(figsize=(10,3))
+            plt.plot(ages, orig,  alpha=0.4, label=f'{name} (raw)')
+            plt.plot(ages, filt,  lw=1.8,   label=f'{name} (> {cutoff_period/1_000:.0f} ka)')
+            plt.gca().invert_xaxis()
+            plt.xlabel('Age (yr BP)'); plt.ylabel(name)
+            plt.legend(); plt.tight_layout(); plt.show()
+
+    return df_filt_ch4, df_filt_d18O
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1407,6 +1601,138 @@ def prob_prebins_bar(
 
 
 
+import numpy as np
+import matplotlib.pyplot as plt
+
+def local_stay_split(
+    df_pre, df_sq,
+    forcing_column='pre',
+    target_column='sq',
+    time_column='age',
+    nbins_pre=4,
+    smooth_win=200
+):
+    # ---------- 1) reverse to chronological order ----------
+    pre_raw = df_pre[forcing_column].values[::-1]
+    sq_raw  = df_sq[target_column].values[::-1]
+    t       = df_pre[time_column].values[::-1]
+
+    # ---------- 2) low-pre shading (optional) ----------
+    q50   = np.quantile(pre_raw, 0.5)
+    low   = pre_raw < q50
+    edges = np.diff(low.astype(int))
+    starts = list(np.where(edges == 1)[0] + 1)
+    ends   = list(np.where(edges == -1)[0] + 1)
+    if low[0]:  starts.insert(0, 0)
+    if low[-1]: ends.append(len(low))
+    low_periods = list(zip(starts, ends))
+
+    # ---------- 3) discretise ----------
+    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+    pre_disc = np.clip(np.digitize(pre_raw, bins_pre) - 1, 0, nbins_pre-1)
+    sq_disc  = (sq_raw > 0).astype(int)          # 0 = cold, 1 = warm
+
+    x_idx, y_idx, z_idx = pre_disc[:-1], sq_disc[:-1], sq_disc[1:]
+
+    # ---------- 4) counts tensor ----------
+    counts = np.zeros((nbins_pre, 2, 2), dtype=int)
+    for xi, yi, zi in zip(x_idx, y_idx, z_idx):
+        counts[xi, yi, zi] += 1
+
+    # ---------- 5) conditional-prob tensor ----------
+    totals = counts.sum(axis=2, keepdims=True)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        cond_prob = counts / totals               # P(z | x, y)
+
+    # ---------- helper: centred running mean that ignores NaNs ----------
+    def smooth_nan(arr, win):
+        arr      = np.asarray(arr, float)
+        mask     = ~np.isnan(arr)
+        arr_f    = np.where(mask, arr, 0.0)
+        kern     = np.ones(win)
+        num      = np.convolve(arr_f, kern, mode='same')
+        denom    = np.convolve(mask.astype(float), kern, mode='same')
+        out      = np.divide(num, denom, where=denom>0)
+        out[denom == 0] = np.nan
+        return out
+
+    # ---------- 6) build the four local probability series ----------
+    cold_stay_raw = np.array([
+        cond_prob[x, 0, 0] if y == 0 else np.nan
+        for x, y in zip(x_idx, y_idx)
+    ])
+    warm_stay_raw = np.array([
+        cond_prob[x, 1, 1] if y == 1 else np.nan
+        for x, y in zip(x_idx, y_idx)
+    ])
+    cold_stay = smooth_nan(cold_stay_raw, smooth_win)
+    warm_stay = smooth_nan(warm_stay_raw, smooth_win)
+
+    # ---------- 7) plotting ----------
+    fig = plt.figure(figsize=(12, 4))
+    gs  = fig.add_gridspec(2, 1, height_ratios=[0.8, 1.6], hspace=0)
+
+    # (a) raw signals
+    ax0 = fig.add_subplot(gs[0])
+    ax0.plot(t, pre_raw, label=forcing_column)
+    ax0b = ax0.twinx()
+    ax0b.plot(t, sq_raw, color='C1', label=target_column)
+    for s, e in low_periods:
+        ax0 .axvspan(t[s], t[e-1], color='grey', alpha=0.3)
+        ax0b.axvspan(t[s], t[e-1], color='grey', alpha=0.3)
+    ax0.set_ylabel(forcing_column)
+    ax0b.set_ylabel(target_column)
+    ax0.tick_params(axis='x', labelbottom=False)
+    lns = ax0.get_lines() + ax0b.get_lines()
+    ax0.legend(lns, [l.get_label() for l in lns], loc='upper right')
+    ax0.set_xlim(t[1], t[-1])
+
+    # (b) persistence probabilities
+    ax1 = fig.add_subplot(gs[1], sharex=ax0)
+    ln1, = ax1.plot(t[1:], cold_stay, color='C0', label='P(cold→cold)')
+    ax1.set_ylabel('P(cold stay)', color='C0')
+    ax1.tick_params(axis='y', colors='C0')
+
+
+    ax1b = ax1.twinx()
+    ln2, = ax1b.plot(t[1:], warm_stay, color='C3', label='P(warm→warm)')
+    ax1b.set_ylabel('P(warm stay)', color='C3')
+    ax1b.tick_params(axis='y', colors='C3')
+
+    for s, e in low_periods:
+        ax1 .axvspan(t[s], t[e-1], color='grey', alpha=0.3)
+        ax1b.axvspan(t[s], t[e-1], color='grey', alpha=0.3)
+
+    ax1.set_xlabel(time_column)
+    ax1.legend([ln1, ln2], ['cold persistence', 'warm persistence'],
+               loc='upper right')
+
+    plt.show()
+
+    return cold_stay, warm_stay
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2555,6 +2881,74 @@ def create_shift_forcing(df_sq, interval, if_plot=False,shift=-10000):
 
 
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+def interpolate_data_lr04(
+    df_sq,
+    lr04_path=r"D:\VScode\bipolar_seesaw_CCM\other_data\lr04.xlsx",
+    sheet_name='Sheet1',
+    if_plot=False
+):
+    """
+    Interpolate the LR04 global benthic δ18O stack onto the
+    age grid already contained in *df_sq* (e.g., the filtered CH4 grid).
+
+    Parameters
+    ----------
+    df_sq : pandas.DataFrame
+        Must contain an 'age' column (yr BP).  Only the age axis is used.
+    lr04_path : str
+        Full path to lr04.xlsx (two columns: age [kyr], d18O).
+    sheet_name : str or int
+        Worksheet index / name inside the Excel file.
+    if_plot : bool
+        When True, show the raw LR04 series and the interpolated version
+        on the df_sq grid.
+
+    Returns
+    -------
+    df_lr04_interp : pandas.DataFrame
+        Columns ['age', 'd18O'] on exactly the same age grid as df_sq.
+    """
+    # ---------- 1. read & tidy LR04 --------------------
+    df_lr04 = pd.read_excel(lr04_path, sheet_name=sheet_name)
+    df_lr04.columns = ['age', 'd18O']           # enforce names
+    df_lr04['age'] *= 1_000                     # kyr → yr BP
+
+    # ---------- 2. interpolate onto df_sq ages --------
+    ages_target = df_sq['age'].values
+    d18o_interp = np.interp(ages_target,
+                            df_lr04['age'].values,
+                            df_lr04['d18O'].values)
+
+    df_lr04_interp = pd.DataFrame({
+        'age': ages_target,
+        'd18O': d18o_interp
+    })
+
+    # ---------- 3. optional plots ---------------------
+    if if_plot:
+        # (a) raw LR04
+        plt.figure(figsize=(10, 3))
+        plt.plot(df_lr04['age'], df_lr04['d18O'], lw=0.8, label='LR04 raw')
+        plt.gca().invert_xaxis(); plt.gca().invert_yaxis()
+        plt.xlabel('Age (yr BP)'); plt.ylabel('δ18O')
+        plt.title('LR04 stack (raw)')
+        plt.tight_layout(); plt.show()
+
+        # (b) interpolated
+        plt.figure(figsize=(10, 3))
+        plt.plot(df_lr04_interp['age'], df_lr04_interp['d18O'],
+                 lw=1.0, label='LR04 interpolated')
+        plt.gca().invert_xaxis(); plt.gca().invert_yaxis()
+        plt.xlabel('Age (yr BP)'); plt.ylabel('δ18O')
+        plt.title('LR04 interpolated to CH4 grid')
+        plt.tight_layout(); plt.show()
+
+    return df_lr04_interp
 
 
 
