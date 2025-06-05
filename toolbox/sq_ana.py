@@ -1135,12 +1135,6 @@ def count_sq_pre_contexts_3d(
 
 
 
-
-
-
-
-
-
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
@@ -1312,67 +1306,176 @@ def prob_prebins_diffbar_surr(
     return delta_obs, mu_surr, sd_surr, pvals
 
 
-    # fig, ax = plt.subplots(figsize=(6, 4))
-    # # bars
-    # for xi, d, c, ec, ht in zip(x, delta_obs, colors, edgecols, hatches):
-    #     ax.bar(xi, d, color=c, edgecolor=ec, hatch=ht, linewidth=1.4)
-    # # surrogate dots + 1σ error bars
-    # ax.errorbar(x, mu_surr, yerr=sd_surr, fmt='o', color='k',
-    #             capsize=4, label='surrogate mean ±1σ')
-
-    # ax.axhline(0, color='k', lw=0.8)
-    # ax.set_xticks(x)
-    # ax.set_xlabel(f'{forcing_column} bin (0 … {nbins_pre-1})')
-    # ax.set_ylabel('Δ  =  P(stay) − P(flip)')
-    # ax.set_title(f'Stay–Flip bias per pre-bin  (hatched = p ≥ {alpha})')
-    # ax.set_ylim(0.95, 1.01)
-    # ax.legend(loc='upper right')
-
-    # # annotate Δ and p
-    # for xi, d, pv in zip(x, delta_obs, pvals):
-    #     ax.text(xi, d + 0.01*np.sign(d),
-    #             f'{d:+.2f}\n(p={pv:.3f})',
-    #             ha='center',
-    #             va='bottom' if d>=0 else 'top',
-    #             fontsize=8)
-
-
-    # # pick a y-position slightly below current y-limits
-    # y0, y1 = ax.get_ylim()
-    # y_arrow = y0 - 0.05 * (y1 - y0)
-
-    # # 1) left-pointing arrow  (decreasing pre)
-    # ax.annotate(
-    #     '', xy=(0,         y_arrow), xytext=(nbins_pre/2, y_arrow),
-    #     arrowprops=dict(arrowstyle='-|>', lw=1.4)
-    # )
-    # ax.text(
-    #     nbins_pre/2, y_arrow - 0.03*(y1 - y0),
-    #     'decreasing precession index',
-    #     ha='center', va='top', fontsize=9
-    # )
-
-    # # 2) right-pointing arrow (increasing pre)
-    # ax.annotate(
-    #     '', xy=(nbins_pre-1, y_arrow), xytext=(nbins_pre/2, y_arrow),
-    #     arrowprops=dict(arrowstyle='-|>', lw=1.4)
-    # )
-    # ax.text(
-    #     nbins_pre/2, y_arrow + 0.04*(y1 - y0),
-    #     'increasing precession index',
-    #     ha='center', va='bottom', fontsize=9
-    # )
-
-    # # extend the y-axis so arrows are in view
-    # ax.set_ylim(y0 - 0.12*(y1 - y0), y1)
 
 
 
 
-    # plt.tight_layout()
-    # plt.show()
 
-    # return delta_obs, mu_surr, sd_surr, pvals
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
+
+
+# # ---------- helpers already in your file ----------
+# def _count_tensor(pre_disc, sq_disc, nbins_pre):
+#     """counts[x_bin, sq_prev, sq_next]"""
+#     x_idx, y_idx, z_idx = pre_disc[:-1], sq_disc[:-1], sq_disc[1:]
+#     counts = np.zeros((nbins_pre, 2, 2), dtype=int)
+#     for xi, yi, zi in zip(x_idx, y_idx, z_idx):
+#         counts[xi, yi, zi] += 1
+#     return counts
+
+
+# ---------- NEW helper: Δ = P(warm-stay) – P(cold-stay) ----------
+def _staydiff_from_counts(counts):
+    """return Δ_j for all pre-bins"""
+    # warm-stay   P(1→1 | pre)
+    warm_tot = counts[:, 1, 1] + counts[:, 1, 0]
+    cold_tot = counts[:, 0, 0] + counts[:, 0, 1]
+
+    with np.errstate(divide='ignore', invalid='ignore'):
+        p_warm = np.divide(counts[:, 1, 1], warm_tot, where=warm_tot > 0)
+        p_cold = np.divide(counts[:, 0, 0], cold_tot, where=cold_tot > 0)
+
+    return p_warm - p_cold, p_warm, p_cold
+
+
+# =================================================================
+#  MAIN FUNCTION
+# =================================================================
+def prob_prebins_staydiff_surr(
+    df_pre, df_sq,
+    forcing_column='pre',
+    target_column='sq',
+    nbins_pre=6,
+    n_surr=100,
+    alpha=0.05,
+    random_state=None
+):
+    """
+    Δ = P(warm→warm) − P(cold→cold) for each pre-bin
+    compared to permutation surrogates.
+    """
+    rng = np.random.default_rng(random_state)
+
+    # ---------- 1) prepare series ----------
+    pre_raw = df_pre[forcing_column].values[::-1]
+    sq_raw  = df_sq [target_column].values[::-1]
+
+    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+    pre_disc = np.clip(np.digitize(pre_raw, bins=bins_pre) - 1, 0, nbins_pre-1)
+    sq_disc  = (sq_raw > 0).astype(int)
+
+    # ---------- 2) observed Δ ----------
+    counts_obs = _count_tensor(pre_disc, sq_disc, nbins_pre)
+    delta_obs, p_warm, p_cold = _staydiff_from_counts(counts_obs)
+
+    # ---------- 3) surrogates ----------
+    delta_surr = np.zeros((n_surr, nbins_pre))
+    for k in range(n_surr):
+        counts_k = _count_tensor(rng.permutation(pre_disc), sq_disc, nbins_pre)
+        delta_surr[k] = _staydiff_from_counts(counts_k)[0]
+
+    mu_surr = np.nanmean(delta_surr, axis=0)
+    sd_surr = np.nanstd (delta_surr, axis=0)
+
+    # p-values (one-sided toward observed sign)
+    pvals = np.empty(nbins_pre)
+    for j in range(nbins_pre):
+        if delta_obs[j] >= mu_surr[j]:
+            tail = np.sum(delta_surr[:, j] >= delta_obs[j])
+        else:
+            tail = np.sum(delta_surr[:, j] <= delta_obs[j])
+        pvals[j] = (tail + 1)/(n_surr + 1)
+
+    # ---------- 4) plot ----------
+    x = np.arange(nbins_pre)
+    cmap  = plt.get_cmap('coolwarm')
+    cmapA = plt.get_cmap('coolwarm_r')
+    colors = cmap(np.linspace(0, 1, nbins_pre))
+    edgecols = np.where(pvals < alpha, 'k', 'grey')
+    hatches  = ['' if p < alpha else '////' for p in pvals]
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    for xi, d, c, ec, ht in zip(x, delta_obs, colors, edgecols, hatches):
+        ax.bar(xi, d, color=c, edgecolor=ec, hatch=ht, linewidth=1.4)
+
+    ax.errorbar(x, mu_surr, yerr=sd_surr, fmt='o', color='k',
+                capsize=4, label='surrogate mean ±1σ')
+
+    for xi, d, pv in zip(x, delta_obs, pvals):
+        ax.text(xi, d + 0.01*np.sign(d),
+                f'{d:+.2f}\n(p={pv:.3f})',
+                ha='center', va='bottom' if d>=0 else 'top', fontsize=8)
+
+    ax.set_xticks(x)
+    ax.set_xlabel(f'{forcing_column} bin (0 … {nbins_pre-1})')
+    ax.set_ylabel('Δ  =  P(warm stay) − P(cold stay)')
+    ax.set_ylim(-0.04, 0.04)
+
+    # gradient arrows as in your previous version ------------------
+    y0, y1 = ax.get_ylim();   y_arrow = y0 - 0.1*(y1 - y0)
+
+    def gradient_arrow(x0, x1, y, cmap, ax, head='left'):
+        xs = np.linspace(x0, x1, 200)
+        ys = np.full_like(xs, y)
+        segs = np.stack([xs, ys], axis=-1).reshape(-1, 1, 2)
+        segs = np.concatenate([segs[:-1], segs[1:]], axis=1)
+        lc = LineCollection(segs, cmap=cmap, norm=plt.Normalize(0, nbins_pre-1),
+                            linewidth=5)
+        lc.set_array(xs)
+        ax.add_collection(lc)
+        ax.scatter([x1], [y], marker='<' if head=='left' else '>',
+                   s=90, color=cmap(xs[-1]/(nbins_pre-1)))
+
+    gradient_arrow(nbins_pre/2, 0, y_arrow, cmapA, ax, 'left')
+    gradient_arrow(nbins_pre/2, nbins_pre-1, y_arrow, cmapA, ax, 'right')
+    ax.text(nbins_pre/6,  y_arrow+0.01, 'Precession ↓', ha='center', va='top')
+    ax.text(nbins_pre*5/6,y_arrow+0.01, 'Precession ↑', ha='center', va='top')
+    ax.set_ylim(y_arrow-0.01, 0.05)
+
+    plt.legend(loc='upper right'); plt.tight_layout(); plt.show()
+
+    return delta_obs, mu_surr, sd_surr, pvals
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
