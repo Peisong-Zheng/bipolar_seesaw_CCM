@@ -321,7 +321,7 @@ def highpass_ch4_d18O(
         ]:
             plt.figure(figsize=(10,3))
             plt.plot(ages, orig,  alpha=0.4, label=f'{name} (raw)')
-            plt.plot(ages, filt,  lw=1.8,   label=f'{name} (> {cutoff_period/1_000:.0f} ka)')
+            plt.plot(ages, filt,  lw=1.8,   label=f'{name} (> 1/{cutoff_period/1_000:.0f} ka)')
             plt.gca().invert_xaxis()
             plt.xlabel('Age (yr BP)'); plt.ylabel(name)
             plt.legend(); plt.tight_layout(); plt.show()
