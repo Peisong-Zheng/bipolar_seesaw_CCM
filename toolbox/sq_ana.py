@@ -16,6 +16,516 @@ from joblib import Parallel, delayed
 
 
 
+# import numpy as np
+# import pywt
+# import matplotlib.pyplot as plt
+# from pyinform import transfer_entropy
+
+
+# def freq_resolved_te(
+#     x, y,                       # 1-D arrays, same length, chronological
+#     *,
+#     wavelet='cmor1.5-1.0',
+#     max_level=None,             # None → use all scales up to Nyquist/2
+#     k=1,
+#     plot=True,
+#     cmap='viridis'
+# ):
+#     """
+#     Frequency-(scale-)resolved transfer entropy matrix:
+#         rows   = source scale index
+#         cols   = target scale index
+#     """
+#     if len(x) != len(y):
+#         raise ValueError("x and y must have equal length")
+
+#     # --- 1. choose scales automatically --------------------------
+#     # use dyadic (1,2,3,... ) until "max_level" or N/2
+#     N = len(x)
+#     max_level = max_level or (N // 2)
+#     scales = np.arange(1, max_level + 1)
+#     x=x[::-1]
+#     y=y[::-1]   
+
+#     # --- 2. CWT (complex) ---------------------------------------
+#     coeffs_x, _ = pywt.cwt(x, scales, wavelet)
+#     coeffs_y, _ = pywt.cwt(y, scales, wavelet)
+
+#     # --- 3. discretise phase into 8 bins ------------------------
+#     phase_bins = np.linspace(-np.pi, np.pi, 9)
+#     disc_x = np.digitize(np.angle(coeffs_x), phase_bins) - 1
+#     disc_y = np.digitize(np.angle(coeffs_y), phase_bins) - 1
+
+#     n_sc   = len(scales)
+#     te_mat = np.empty((n_sc, n_sc))
+
+#     for i in range(n_sc):              # source scale
+#         for j in range(n_sc):          # target scale
+#             te_mat[i, j] = transfer_entropy(
+#                 disc_x[i, :-1], disc_y[j, 1:], k=k
+#             )
+
+#     # --- 4. optional plot ---------------------------------------
+#     if plot:
+#         plt.figure(figsize=(6, 5))
+#         plt.imshow(te_mat, origin='lower', cmap=cmap,
+#                    extent=[0, n_sc, 0, n_sc], aspect='auto')
+#         plt.colorbar(label='TE (bits)')
+#         plt.xlabel('target scale index  (low → high freq)')
+#         plt.ylabel('source scale index')
+#         plt.title('Frequency-resolved Transfer Entropy')
+#         plt.tight_layout()
+#         plt.show()
+
+#     return te_mat, scales
+
+
+
+
+
+
+# import numpy as np
+# import pywt
+# import matplotlib.pyplot as plt
+# from pyinform import transfer_entropy
+
+
+# def freq_resolved_te(
+#     x, y,                       # 1-D arrays (chronological)
+#     *,
+#     wavelet='cmor1.5-1.0',
+#     max_level=None,
+#     k=1,
+#     plot=True,
+#     cmap='viridis'
+# ):
+#     """
+#     Continuous-wavelet scalogram  +  scale×scale TE matrix.
+
+#     Returns
+#     -------
+#     te_mat  : 2-D ndarray  [src scale , trg scale]
+#     scales  : list of scale numbers (PyWavelets convention)
+#     """
+
+#     # ------------------------------------------------------------------
+#     # 1. choose dyadic scales  (1 … max_level)
+#     # ------------------------------------------------------------------
+#     N = len(x)
+#     max_level = max_level or (N // 4)          # ≤ N/4 keeps runtime sane
+#     scales = np.arange(1, max_level + 1)       # 1 = highest frequency
+
+#     # ------------------------------------------------------------------
+#     # 2. complex CWT on both series
+#     # ------------------------------------------------------------------
+#     coeffs_x, _ = pywt.cwt(x, scales, wavelet)
+#     coeffs_y, _ = pywt.cwt(y, scales, wavelet)
+
+#     # absolute power for plotting
+#     pow_x = np.abs(coeffs_x) ** 2
+#     pow_y = np.abs(coeffs_y) ** 2
+
+#     # ------------------------------------------------------------------
+#     # 3. phase → 8-bin symbol sequences
+#     # ------------------------------------------------------------------
+#     phase_bins = np.linspace(-np.pi, np.pi, 9)
+#     disc_x = np.digitize(np.angle(coeffs_x), phase_bins) - 1
+#     disc_y = np.digitize(np.angle(coeffs_y), phase_bins) - 1
+
+#     # ------------------------------------------------------------------
+#     # 4. TE per (src scale , trg scale)
+#     # ------------------------------------------------------------------
+#     n_sc = len(scales)
+#     te_mat = np.empty((n_sc, n_sc))
+
+#     for i in range(n_sc):
+#         for j in range(n_sc):
+#             te_mat[i, j] = transfer_entropy(
+#                 disc_x[i, :-1],     # X_t  at scale i
+#                 disc_y[j, 1:],      # Y_{t+1} at scale j
+#                 k=k
+#             )
+
+#     # ------------------------------------------------------------------
+#     # 5. plots: two scalograms + TE matrix
+#     # ------------------------------------------------------------------
+#     if plot:
+#         fig, ax = plt.subplots(1, 3, figsize=(14, 5),
+#                                gridspec_kw={'width_ratios':[1,1,1.2]})
+
+#         im0 = ax[0].imshow(pow_x, origin='lower', aspect='auto',
+#                            cmap='hot', extent=[0,N,0,n_sc])
+#         ax[0].set_title('Source (pre) scalogram')
+#         ax[0].set_ylabel('scale index')
+#         plt.colorbar(im0, ax=ax[0], fraction=0.046)
+
+#         im1 = ax[1].imshow(pow_y, origin='lower', aspect='auto',
+#                            cmap='hot', extent=[0,N,0,n_sc])
+#         ax[1].set_title('Target (sq) scalogram')
+#         plt.colorbar(im1, ax=ax[1], fraction=0.046)
+
+#         im2 = ax[2].imshow(te_mat, origin='lower', aspect='auto',
+#                            cmap=cmap, extent=[0,n_sc,0,n_sc])
+#         ax[2].set_title('Scale×Scale TE (bits)')
+#         ax[2].set_xlabel('target scale'); ax[2].set_ylabel('source scale')
+#         plt.colorbar(im2, ax=ax[2], fraction=0.046)
+#         plt.tight_layout(); plt.show()
+
+#     return te_mat, scales
+
+
+
+
+import numpy as np, pywt, matplotlib.pyplot as plt
+from pyinform import transfer_entropy
+
+
+def freq_resolved_te(
+    x, y,
+    *,
+    wavelet='cmor1.5-1.0',
+    sampling_period=10,          # yr per sample
+    # ---- source (pre) band -----------------------------------
+    src_min_period=20_000,       # yr
+    src_max_period=20_000,
+    n_src_scales=3,              # if min=max, use 3 scales around it
+    # ---- target (sq) band ------------------------------------
+    trg_min_period=100,          # yr
+    trg_max_period=3_000,
+    n_trg_scales=64,
+    k=1,
+    plot=True,
+    cmap='viridis',
+    source_vname='Precession',       # e.g. 'pre'
+    target_vname='CH₄ MCV'        # e.g. 'sq'
+):
+    """
+    Wavelet-scale × wavelet-scale TE with *separate* period bands
+    for source (x) and target (y).
+
+    Returns
+    -------
+    te_mat     : (n_src × n_trg) array
+    periods_x  : list (len n_src)  [yr]
+    periods_y  : list (len n_trg)  [yr]
+    """
+    x= x[::-1]  # reverse chronological order
+    y= y[::-1]  # reverse chronological order
+
+    if len(x) != len(y):
+        raise ValueError("x and y must have equal length")
+
+    # ---------- helper: build scale list -----------------------
+    fc = pywt.central_frequency(wavelet)
+
+    def build_scales(min_p, max_p, n_sc):
+        if np.isclose(min_p, max_p):
+            ctr = min_p
+            periods = ctr * np.geomspace(0.8, 1.2, n_sc)
+        else:
+            periods = np.geomspace(min_p, max_p, n_sc)
+        return periods, periods * fc / sampling_period
+
+    periods_x, scales_x = build_scales(src_min_period, src_max_period,
+                                       n_src_scales)
+    periods_y, scales_y = build_scales(trg_min_period, trg_max_period,
+                                       n_trg_scales)
+
+    # ---------- 1. CWT -----------------------------------------
+    coeffs_x, _ = pywt.cwt(x, scales_x, wavelet,
+                           sampling_period=sampling_period)
+    coeffs_y, _ = pywt.cwt(y, scales_y, wavelet,
+                           sampling_period=sampling_period)
+
+    pow_x = np.abs(coeffs_x) ** 2
+    pow_y = np.abs(coeffs_y) ** 2
+
+    # Immediately after pow_x is computed:
+    row_max = pow_x.mean(axis=1).argmax()
+    print("max-power row = %d   →  period ≈ %.1f ka"
+        % (row_max, periods_x[row_max]/1000))
+
+    # ---------- 2. discretise phase ----------------------------
+    bins = np.linspace(-np.pi, np.pi, 9)
+    disc_x = np.digitize(np.angle(coeffs_x), bins) - 1
+    disc_y = np.digitize(np.angle(coeffs_y), bins) - 1
+
+    # ---------- 3. TE matrix -----------------------------------
+    te_mat = np.empty((len(scales_x), len(scales_y)))
+    for i in range(len(scales_x)):        # src scale
+        for j in range(len(scales_y)):    # trg scale
+            te_mat[i, j] = transfer_entropy(
+                disc_x[i, :-1], disc_y[j, 1:], k=k
+            )
+
+    # ---------- 4. plots ---------------------------------------
+    if plot:
+        # t_ka = np.arange(len(x)) * sampling_period / 1000  # time axis in ka
+        # # extent_x = [t_ka[0], t_ka[-1],
+        # #             periods_x[-1]/1000, periods_x[0]/1000]
+        # # extent_y = [t_ka[0], t_ka[-1],
+        # #             periods_y[-1]/1000, periods_y[0]/1000]
+
+        # extent_x = [t_ka[0], t_ka[-1],
+        #             periods_x[-1]/1000, periods_x[0]/1000]
+        # extent_y = [t_ka[0], t_ka[-1],
+        #             periods_y[-1]/1000, periods_y[0]/1000]
+
+        # fig, ax = plt.subplots(1, 3, figsize=(15, 5),
+        #                        gridspec_kw={'width_ratios':[1,1,1.3]})
+
+        # im0 = ax[0].imshow(pow_x, origin='upper', aspect='auto',
+        #                    cmap='hot', extent=extent_x)
+        # ax[0].set_title('source scalogram (pre)')
+        # ax[0].set_xlabel('time (ka BP)')
+        # ax[0].set_ylabel('period (ka)')
+        # plt.colorbar(im0, ax=ax[0], fraction=.046)
+
+        # im1 = ax[1].imshow(pow_y, origin='upper', aspect='auto',
+        #                    cmap='hot', extent=extent_y)
+        # ax[1].set_title('target scalogram (sq)')
+        # ax[1].set_xlabel('time (ka BP)')
+        # plt.colorbar(im1, ax=ax[1], fraction=.046)
+
+        # # TE matrix with period axes
+        # im2 = ax[2].imshow(te_mat, origin='lower', aspect='auto',
+        #                    cmap=cmap,
+        #                    extent=[periods_y[0]/1000, periods_y[-1]/1000,
+        #                            periods_x[0]/1000, periods_x[-1]/1000])
+        # ax[2].set_title('TE  (source period → target period)')
+        # ax[2].set_xlabel('target period (ka)')
+        # ax[2].set_ylabel('source period (ka)')
+
+        # # for a in ax[:2]:
+        # #     a.set_yscale('log')
+        # #     a.invert_yaxis()       # smaller periods at bottom, like a spectrogram
+        # # ax[2].set_yscale('log')
+        # # ax[2].set_xscale('log')
+
+        # plt.colorbar(im2, ax=ax[2], fraction=.046)
+
+        # plt.tight_layout(); plt.show()
+        # --- build extents -------------------------------------------------
+        t_ka = np.arange(len(x)) * sampling_period / 1000   # time axis in ka
+
+        extent_src = [t_ka[0], t_ka[-1],
+                    periods_x[0]/1000, periods_x[-1]/1000]   # low → high period
+        extent_trg = [t_ka[0], t_ka[-1],
+                    periods_y[0]/1000, periods_y[-1]/1000]
+
+        extent_te  = [periods_y[0]/1000, periods_y[-1]/1000,   # x-axis  (target)
+                    periods_x[0]/1000, periods_x[-1]/1000]   # y-axis  (source)
+
+        # --- plots ---------------------------------------------------------
+        fig, ax = plt.subplots(1, 3, figsize=(15, 3.5),
+                            gridspec_kw={'width_ratios':[1,1,1.3]})
+
+        im0 = ax[0].imshow(pow_x, origin='upper', aspect='auto',
+                        cmap='hot', extent=extent_src)
+        ax[0].set_title('source scalogram (pre)')
+        ax[0].set_xlabel('time (ka BP)')
+        ax[0].set_ylabel('period (ka)')
+        plt.colorbar(im0, ax=ax[0], fraction=.046)
+
+        im1 = ax[1].imshow(pow_y, origin='upper', aspect='auto',
+                        cmap='hot', extent=extent_trg)
+        ax[1].set_title('target scalogram (sq)')
+        ax[1].set_xlabel('time (ka BP)')
+        plt.colorbar(im1, ax=ax[1], fraction=.046)
+
+        im2 = ax[2].imshow(te_mat, origin='upper', aspect='auto',
+                        cmap=cmap, extent=extent_te, vmin=np.quantile(te_mat,0.5), vmax=te_mat.max())
+        ax[2].set_title('TE  (source phases → target phases)')
+        ax[2].set_xlabel(f'{target_vname} period (ka)')
+        ax[2].set_ylabel(f'{source_vname} period (ka)')
+        plt.colorbar(im2, ax=ax[2], fraction=.046)
+
+        plt.tight_layout(); plt.show()
+
+
+    return te_mat, periods_x, periods_y
+
+
+
+
+
+# def te_matrix_zscore(x, y, n_perm=100, **kwargs):
+#     te_obs, px, py = freq_resolved_te(x, y, plot=False, **kwargs)
+#     null_stack = np.empty((n_perm, *te_obs.shape))
+#     rng = np.random.default_rng(0)
+
+#     for k in range(n_perm):
+#         x_perm = rng.permutation(x)
+#         null_stack[k], _, _ = freq_resolved_te(x_perm, y, plot=False, **kwargs)
+
+#     mu  = null_stack.mean(axis=0)
+#     sig = null_stack.std (axis=0)
+#     z   = (te_obs - mu) / sig
+#     vmax = np.nanpercentile(abs(z), 99)
+
+#     # plot
+#     plt.imshow(z, origin='lower', cmap='bwr', vmin=-vmax, vmax=vmax,
+#                extent=[py[0]/1e3, py[-1]/1e3, px[0]/1e3, px[-1]/1e3])
+#     plt.colorbar(label='z-score')
+#     plt.xlabel('target period (ka)'); plt.ylabel('source period (ka)')
+#     plt.title('Scale×scale TE  (z-score vs permutations)')
+#     plt.tight_layout(); plt.show()
+#     return z
+
+
+# from joblib import Parallel, delayed
+# import numpy as np, matplotlib.pyplot as plt
+
+# def _perm_te(x, y, rng, kwargs):
+#     """worker: compute TE matrix for one permutation of x"""
+#     x_perm = rng.permutation(x)
+#     te_mat, _, _ = freq_resolved_te(x_perm, y, plot=False, **kwargs)
+#     return te_mat
+
+# def te_matrix_zscore(
+#     x, y,
+#     n_perm      = 100,
+#     n_jobs      = -1,        # -1 → use all available cores
+#     random_seed = 0,
+#     **kwargs                  # passed straight to freq_resolved_te
+# ):
+#     """
+#     Permutation test for the scale×scale TE map.
+#     Returns z-score matrix; also draws it.
+#     """
+#     x = x[::-1]  # reverse chronological order
+#     y = y[::-1]  # reverse chronological order
+#     # 1) observed matrix
+#     te_obs, p_src, p_trg = freq_resolved_te(x, y, plot=False, **kwargs)
+
+#     # 2) parallel surrogates
+#     rng_master = np.random.default_rng(random_seed)
+#     seeds = rng_master.integers(0, 2**32-1, size=n_perm)
+
+#     null_list = Parallel(n_jobs=n_jobs, prefer='processes')(
+#         delayed(_perm_te)(x, y,
+#                           np.random.default_rng(s),  # private RNG per worker
+#                           kwargs)
+#         for s in seeds
+#     )
+#     null_stack = np.stack(null_list, axis=0)
+
+#     # 3) z-score
+#     mu  = null_stack.mean(axis=0)
+#     sig = null_stack.std (axis=0)
+#     z   = (te_obs - mu) / sig
+
+#     # 4) plot
+#     vmax = np.nanpercentile(np.abs(z), 99)
+#     plt.imshow(z, origin='lower', cmap='bwr',
+#                vmin=-vmax, vmax=vmax,
+#                extent=[p_trg[0]/1e3, p_trg[-1]/1e3,
+#                        p_src[0]/1e3, p_src[-1]/1e3])
+#     plt.colorbar(label='z-score')
+#     plt.xlabel('target period (ka)')
+#     plt.ylabel('source period (ka)')
+#     plt.title(f'Scale×scale TE  (z, {n_perm} perms, two-tailed)')
+#     plt.tight_layout(); plt.show()
+
+#     return z
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# from dit import Distribution
+# from dit.other import pid
+# from itertools import product
+
+
+# def pid_unique_redundant(
+#     x, y, z,          # 1-D int arrays (|alphabet| ≤ 16 recommended)
+#     k=1,              # use x_t , y_t to predict z_{t+1}
+#     pid_method='wb2018'
+# ):
+#     """
+#     PID of {X,Y} → Z_{t+1}.  Returns dict with
+#         'unique_x' , 'unique_y' , 'redundant' , 'synergy'
+#     in bits.
+#     """
+#     # build joint symbols for a first-order Markov set-up
+#     xs, ys, zs = x[:-1], y[:-1], z[1:]
+
+#     # alphabet tuples (x,y,z)
+#     joint = list(zip(xs, ys, zs))
+#     outcomes, counts = np.unique(joint, return_counts=True, axis=0)
+#     probs = counts / counts.sum()
+#     outcomes = [tuple(o) for o in outcomes]
+
+#     d = Distribution(outcomes, probs)
+#     d.set_rv_names(('X','Y','Z'))
+
+#     P = pid.pid(d, pid_method, ((0,), (1,)), (2,))
+#     return {k: P[k] for k in ('UIX', 'UIY', 'RXY', 'SIXY')}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # reload module in case of updates
 def mc_TE_heatmap_inter(
     df_sq,
@@ -1239,20 +1749,20 @@ def prob_prebins_diffbar_surr(
 
     # annotate Δ and p
     for xi, d, pv in zip(x, delta_obs, pvals):
-        ax.text(xi, d + 0.01*np.sign(d),
+        ax.text(xi, d + 0.04*np.sign(d),
                 f'{d:+.2f}\n(p={pv:.3f})',
                 ha='center',
                 va='bottom' if d>=0 else 'top',
                 fontsize=8)
     # … (labels, title, annotations of Δ and p remain the same) …
-    ax.set_ylim(0.95, 1.01)
+    ax.set_ylim(0.6, 1.01)
 
     ax.set_xticks(x)
     ax.set_xlabel(f'{forcing_column} bin (0 … {nbins_pre-1})')
     ax.set_ylabel('Δ  =  P(stay) − P(flip)')
     # 2) Replace the two annotate-arrows with coloured LineCollections
     y0, y1 = ax.get_ylim()
-    y_arrow = y0 - 0.05*(y1 - y0)
+    y_arrow = y0 + 0.03*(y1 - y0)
     
     # helper to draw a gradient arrow from x_start→x_end
     def gradient_arrow(x_start, x_end, y, cmap, norm, ax, head_size=100, dir='left'):
@@ -1298,7 +1808,7 @@ def prob_prebins_diffbar_surr(
             ha='center', va='top', fontsize=10)
     
     # extend the y-axis so your arrows are fully visible
-    ax.set_ylim(y0 - 0.12*(y1 - y0), y1)
+    # ax.set_ylim(y0 - 0.12*(y1 - y0), y1)
     
     plt.tight_layout()
     plt.show()
@@ -1385,7 +1895,7 @@ def prob_prebins_staydiff_surr(
     pvals = np.empty(nbins_pre)
     for j in range(nbins_pre):
         if delta_obs[j] >= mu_surr[j]:
-            tail = np.sum(delta_surr[:, j] >= delta_obs[j])
+            tail = np.sum(delta_surr[:, j]>= delta_obs[j])
         else:
             tail = np.sum(delta_surr[:, j] <= delta_obs[j])
         pvals[j] = (tail + 1)/(n_surr + 1)
@@ -1506,75 +2016,75 @@ def prob_prebins_staydiff_surr(
 
 
 
-import numpy as np
-import matplotlib.pyplot as plt
+# import numpy as np
+# import matplotlib.pyplot as plt
 
-def prob_prebins_diffbar(
-    df_pre,
-    df_sq,
-    forcing_column='pre',
-    target_column='sq',
-    time_column='age',
-    nbins_pre=6
-):
-    """
-    For each pre-bin plot a single bar whose height is
-    Δ = P(stay | pre-bin) - P(flip | pre-bin).
-    Positive bars → staying is more likely; negative → flipping.
-    """
+# def prob_prebins_diffbar(
+#     df_pre,
+#     df_sq,
+#     forcing_column='pre',
+#     target_column='sq',
+#     time_column='age',
+#     nbins_pre=6
+# ):
+#     """
+#     For each pre-bin plot a single bar whose height is
+#     Δ = P(stay | pre-bin) - P(flip | pre-bin).
+#     Positive bars → staying is more likely; negative → flipping.
+#     """
 
-    # 1) reverse to chronological order
-    pre_raw = df_pre[forcing_column].values[::-1]
-    sq_raw  = df_sq[target_column].values[::-1]
+#     # 1) reverse to chronological order
+#     pre_raw = df_pre[forcing_column].values[::-1]
+#     sq_raw  = df_sq[target_column].values[::-1]
 
-    # 2) discretise pre
-    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
-    pre_disc = np.digitize(pre_raw, bins_pre) - 1
-    pre_disc = np.clip(pre_disc, 0, nbins_pre - 1)
-    sq_disc  = (sq_raw > 0).astype(int)
+#     # 2) discretise pre
+#     bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+#     pre_disc = np.digitize(pre_raw, bins_pre) - 1
+#     pre_disc = np.clip(pre_disc, 0, nbins_pre - 1)
+#     sq_disc  = (sq_raw > 0).astype(int)
 
-    # 3) indices at t-1 and t
-    x_idx = pre_disc[:-1]
-    y_idx = sq_disc[:-1]
-    z_idx = sq_disc[1:]
+#     # 3) indices at t-1 and t
+#     x_idx = pre_disc[:-1]
+#     y_idx = sq_disc[:-1]
+#     z_idx = sq_disc[1:]
 
-    # 4) tally counts[x_bin, y_prev, z_next]
-    counts = np.zeros((nbins_pre, 2, 2), dtype=int)
-    for xi, yi, zi in zip(x_idx, y_idx, z_idx):
-        counts[xi, yi, zi] += 1
+#     # 4) tally counts[x_bin, y_prev, z_next]
+#     counts = np.zeros((nbins_pre, 2, 2), dtype=int)
+#     for xi, yi, zi in zip(x_idx, y_idx, z_idx):
+#         counts[xi, yi, zi] += 1
 
-    # 5) aggregate over y_prev
-    N_flip = counts[:, 0, 1] + counts[:, 1, 0]
-    N_stay = counts[:, 0, 0] + counts[:, 1, 1]
-    N_tot  = N_flip + N_stay
+#     # 5) aggregate over y_prev
+#     N_flip = counts[:, 0, 1] + counts[:, 1, 0]
+#     N_stay = counts[:, 0, 0] + counts[:, 1, 1]
+#     N_tot  = N_flip + N_stay
 
-    with np.errstate(divide='ignore', invalid='ignore'):
-        p_flip = np.divide(N_flip, N_tot, where=N_tot > 0)
-        p_stay = np.divide(N_stay, N_tot, where=N_tot > 0)
+#     with np.errstate(divide='ignore', invalid='ignore'):
+#         p_flip = np.divide(N_flip, N_tot, where=N_tot > 0)
+#         p_stay = np.divide(N_stay, N_tot, where=N_tot > 0)
 
-    delta = p_stay - p_flip      # this is what we’ll plot
+#     delta = p_stay - p_flip      # this is what we’ll plot
 
-    # 6) bar chart of Δ
-    x = np.arange(nbins_pre)
-    colors = np.where(delta >= 0, 'C3', 'C2')   # greenish if stay>flip, red if flip>stay
+#     # 6) bar chart of Δ
+#     x = np.arange(nbins_pre)
+#     colors = np.where(delta >= 0, 'C3', 'C2')   # greenish if stay>flip, red if flip>stay
 
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.bar(x, delta, color=colors)
-    ax.axhline(0, color='k', linewidth=0.8)
-    ax.set_xticks(x)
-    ax.set_xlabel('pre bin (0 … {})'.format(nbins_pre - 1))
-    ax.set_ylabel('P(stay) − P(flip)')
-    ax.set_title('Stay-vs-Flip bias per pre-bin')
-    ax.set_ylim(0.95, 1.0)
+#     fig, ax = plt.subplots(figsize=(6, 4))
+#     ax.bar(x, delta, color=colors)
+#     ax.axhline(0, color='k', linewidth=0.8)
+#     ax.set_xticks(x)
+#     ax.set_xlabel('pre bin (0 … {})'.format(nbins_pre - 1))
+#     ax.set_ylabel('P(stay) − P(flip)')
+#     ax.set_title('Stay-vs-Flip bias per pre-bin')
+#     ax.set_ylim(0.95, 1.0)
 
-    # annotate values
-    # for xi, d in enumerate(delta):
-        # ax.text(xi, d + 0.03 * np.sign(d), f'{d:+.2f}', ha='center', va='bottom' if d>=0 else 'top')
+#     # annotate values
+#     # for xi, d in enumerate(delta):
+#         # ax.text(xi, d + 0.03 * np.sign(d), f'{d:+.2f}', ha='center', va='bottom' if d>=0 else 'top')
 
-    # plt.tight_layout()
-    plt.show()
+#     # plt.tight_layout()
+#     plt.show()
 
-    return delta
+#     return delta
 
 
 
@@ -1620,59 +2130,59 @@ def prob_prebins_diffbar(
 
 
 
-def prob_prebins_bar(
-    df_pre,
-    df_sq,
-    forcing_column='pre',
-    target_column='sq',
-    time_column='age',
-    nbins_pre=6
-):
-    # ----- 1) raw series (reverse so age increases to the right) -----
-    pre_raw = df_pre[forcing_column].values[::-1]
-    sq_raw  = df_sq[target_column].values[::-1]
+# def prob_prebins_bar(
+#     df_pre,
+#     df_sq,
+#     forcing_column='pre',
+#     target_column='sq',
+#     time_column='age',
+#     nbins_pre=6
+# ):
+#     # ----- 1) raw series (reverse so age increases to the right) -----
+#     pre_raw = df_pre[forcing_column].values[::-1]
+#     sq_raw  = df_sq[target_column].values[::-1]
 
-    # ----- 2) discretise -----
-    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
-    pre_disc = np.digitize(pre_raw, bins_pre) - 1
-    pre_disc = np.clip(pre_disc, 0, nbins_pre-1)        # guard overflow
-    sq_disc  = (sq_raw > 0).astype(int)                 # 0/1
+#     # ----- 2) discretise -----
+#     bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+#     pre_disc = np.digitize(pre_raw, bins_pre) - 1
+#     pre_disc = np.clip(pre_disc, 0, nbins_pre-1)        # guard overflow
+#     sq_disc  = (sq_raw > 0).astype(int)                 # 0/1
 
-    # ----- 3) indices for t-1 and t -----
-    x_idx = pre_disc[:-1]
-    y_idx = sq_disc[:-1]
-    z_idx = sq_disc[1:]
+#     # ----- 3) indices for t-1 and t -----
+#     x_idx = pre_disc[:-1]
+#     y_idx = sq_disc[:-1]
+#     z_idx = sq_disc[1:]
 
-    # ----- 4) 3-D count tensor  counts[x_bin, y_prev, z_next] -----
-    counts = np.zeros((nbins_pre, 2, 2), dtype=int)
-    for xi, yi, zi in zip(x_idx, y_idx, z_idx):
-        counts[xi, yi, zi] += 1
+#     # ----- 4) 3-D count tensor  counts[x_bin, y_prev, z_next] -----
+#     counts = np.zeros((nbins_pre, 2, 2), dtype=int)
+#     for xi, yi, zi in zip(x_idx, y_idx, z_idx):
+#         counts[xi, yi, zi] += 1
 
-    # ----- 5) aggregate over y_prev -----
-    N_flip = counts[:, 0, 1] + counts[:, 1, 0]   # z ≠ y
-    N_stay = counts[:, 0, 0] + counts[:, 1, 1]   # z = y
-    N_tot  = N_flip + N_stay
+#     # ----- 5) aggregate over y_prev -----
+#     N_flip = counts[:, 0, 1] + counts[:, 1, 0]   # z ≠ y
+#     N_stay = counts[:, 0, 0] + counts[:, 1, 1]   # z = y
+#     N_tot  = N_flip + N_stay
 
-    with np.errstate(divide='ignore', invalid='ignore'):
-        p_flip = np.divide(N_flip, N_tot, where=N_tot > 0)
-        p_stay = np.divide(N_stay, N_tot, where=N_tot > 0)
+#     with np.errstate(divide='ignore', invalid='ignore'):
+#         p_flip = np.divide(N_flip, N_tot, where=N_tot > 0)
+#         p_stay = np.divide(N_stay, N_tot, where=N_tot > 0)
 
-    # ----- 6) stacked-bar plot -----
-    x = np.arange(nbins_pre)
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.bar(x, p_stay, color='C3', label='stay')
-    ax.bar(x, p_flip, bottom=p_stay, color='C2', label='flip')
+#     # ----- 6) stacked-bar plot -----
+#     x = np.arange(nbins_pre)
+#     fig, ax = plt.subplots(figsize=(6, 4))
+#     ax.bar(x, p_stay, color='C3', label='stay')
+#     ax.bar(x, p_flip, bottom=p_stay, color='C2', label='flip')
 
-    ax.set_xlabel('pre bin (0 … {})'.format(nbins_pre - 1))
-    ax.set_ylabel('probability')
-    ax.set_xticks(x)
-    ax.set_ylim(0.95, 1.02)
-    ax.legend(loc='upper right')
-    ax.set_title('Probability of stay / flip vs. pre bin')
-    plt.tight_layout()
-    plt.show()
+#     ax.set_xlabel('pre bin (0 … {})'.format(nbins_pre - 1))
+#     ax.set_ylabel('probability')
+#     ax.set_xticks(x)
+#     ax.set_ylim(0.95, 1.02)
+#     ax.legend(loc='upper right')
+#     ax.set_title('Probability of stay / flip vs. pre bin')
+#     plt.tight_layout()
+#     plt.show()
 
-    return p_flip, p_stay
+#     return p_flip, p_stay
 
 
 
@@ -1983,6 +2493,134 @@ def local_prob(
 
 
 
+def heatmap_binwise_local_te(
+        pre, sq,
+        pre_bins, sq_bins,
+        *, k=1, cmap='viridis', vmin=None, vmax=None,
+        te_func=transfer_entropy):
+    """
+    Compute and plot a bin-wise mean local TE(pre → sq) heat-map.
+
+    Parameters
+    ----------
+    pre, sq : 1-D array-like, same length
+        Time series (index 0 = oldest sample).  Both are REVERSED inside.
+    pre_bins, sq_bins : int or 1-D array-like
+        If int  -> number of equal-width histogram bins.
+        If array -> explicit bin edges as for np.histogram.
+    k : int
+        History length for TE (default 1).
+    cmap, vmin, vmax : passed to imshow.
+    te_func : callable
+        e.g. pyinform.transfer_entropy.
+    """
+    # -------- 0) prep -------------------------------------------------------
+    pre = np.asarray(pre)[::-1]          # reverse to match your workflow
+    sq  = np.asarray(sq )[::-1]
+    if pre.shape != sq.shape:
+        raise ValueError("pre and sq must have the same length")
+
+    # -------- 1) build bin edges -------------------------------------------
+    def _edges(data, spec):
+        if np.isscalar(spec):                       # integer → histogram edges
+            nb = int(spec)
+            if nb < 1:
+                raise ValueError("bins integer must be ≥1")
+            return np.histogram_bin_edges(data, bins=nb)
+        else:                                       # assume iterable of edges
+            edges = np.asarray(spec, dtype=float)
+            if edges.ndim != 1 or edges.size < 2:
+                raise ValueError("bin edges must be 1-D with ≥2 values")
+            # ensure monotone
+            if not (np.all(np.diff(edges) > 0) or np.all(np.diff(edges) < 0)):
+                raise ValueError("bin edges must be strictly monotonic")
+            return edges
+
+    pre_edges = _edges(pre, pre_bins)
+    sq_edges  = _edges(sq , sq_bins)
+
+    n_pre = len(pre_edges) - 1
+    n_sq  = len(sq_edges)  - 1
+
+    # -------- 2) digitise ---------------------------------------------------
+    pre_bin = np.digitize(pre, pre_edges) - 1          # 0 … n_pre-1
+    sq_bin  = np.digitize(sq , sq_edges ) - 1          # 0 … n_sq-1
+
+    # -------- 3) local TE ---------------------------------------------------
+    arr = te_func(pre_bin, sq_bin, k=k, local=True).flatten()
+    if   arr.size == pre.size:        # pyinform returned N   → drop the first k
+        local_te = arr[k:]
+    elif arr.size == pre.size - k:    # pyinform returned N-k → already aligned
+        local_te = arr
+    else:
+        raise ValueError(f"Unexpected local_te length {arr.size}")
+
+    # past-state indices that correspond to each local TE
+    idx_pre = pre_bin[:-k]
+    idx_sq  = sq_bin [:-k]
+
+    # -------- 4) accumulate by bin -----------------------------------------
+    te_sum   = np.zeros((n_pre, n_sq))
+    te_count = np.zeros_like(te_sum, dtype=int)
+
+    for i, j, te in zip(idx_pre, idx_sq, local_te):
+        if 0 <= i < n_pre and 0 <= j < n_sq:
+            te_sum[i, j]   += te
+            te_count[i, j] += 1
+
+    te_grid = np.full_like(te_sum, np.nan, dtype=float)
+    mask    = te_count > 0
+    te_grid[mask] = te_sum[mask] / te_count[mask]
+
+    # -------- 5) plot -------------------------------------------------------
+    fig, ax = plt.subplots(figsize=(6, 2))
+    im = ax.imshow(
+        te_grid.T, origin='lower', aspect='auto',
+        cmap=cmap, vmin=vmin, vmax=vmax,
+        extent=[pre_edges[0], pre_edges[-1], sq_edges[0], sq_edges[-1]]
+    )
+    cbar = fig.colorbar(im, ax=ax, label='Mean local TE (bits)')
+    ax.set_xlabel('pre bin')
+    ax.set_ylabel('sq bin')
+    ax.set_title('Bin-wise mean local transfer entropy')
+    plt.tight_layout()
+    plt.show()
+
+    return te_grid
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2160,57 +2798,57 @@ def local_TE(
 #     plt.show()
 
 
-import numpy as np
-import matplotlib.pyplot as plt
+# import numpy as np
+# import matplotlib.pyplot as plt
 
-def plot_aic_delta(series):
-    """
-    Compute AIC for histogram bin counts B from 2 to 20,
-    then plot both AIC and ΔAIC on a single figure using a twin y-axis,
-    with integer x-ticks, markers, grid, and a larger figure size.
-    """
-    series = np.asarray(series)
-    x_min, x_max = series.min(), series.max()
-    N = series.size
+# def plot_aic_delta(series):
+#     """
+#     Compute AIC for histogram bin counts B from 2 to 20,
+#     then plot both AIC and ΔAIC on a single figure using a twin y-axis,
+#     with integer x-ticks, markers, grid, and a larger figure size.
+#     """
+#     series = np.asarray(series)
+#     x_min, x_max = series.min(), series.max()
+#     N = series.size
 
-    b_values = np.arange(2, 21)
-    aic_list = []
+#     b_values = np.arange(2, 21)
+#     aic_list = []
 
-    for B in b_values:
-        counts, _ = np.histogram(series, bins=B, range=(x_min, x_max))
-        bin_width = (x_max - x_min) / B
-        positive = counts > 0
-        ll = np.sum(counts[positive] * np.log(counts[positive] / (N * bin_width)))
-        K_nonzero = np.count_nonzero(counts)
-        aic = -2 * ll + 2 * (K_nonzero - 1)
-        aic_list.append(aic)
+#     for B in b_values:
+#         counts, _ = np.histogram(series, bins=B, range=(x_min, x_max))
+#         bin_width = (x_max - x_min) / B
+#         positive = counts > 0
+#         ll = np.sum(counts[positive] * np.log(counts[positive] / (N * bin_width)))
+#         K_nonzero = np.count_nonzero(counts)
+#         aic = -2 * ll + 2 * (K_nonzero - 1)
+#         aic_list.append(aic)
 
-    aic_list = np.array(aic_list)
-    delta_aic = np.diff(aic_list)
+#     aic_list = np.array(aic_list)
+#     delta_aic = np.diff(aic_list)
 
-    # Create figure and axes
-    fig, ax1 = plt.subplots(figsize=(7, 4))
-    ax2 = ax1.twinx()
+#     # Create figure and axes
+#     fig, ax1 = plt.subplots(figsize=(7, 4))
+#     ax2 = ax1.twinx()
 
-    # Plot AIC
-    ax1.plot(b_values, aic_list, marker='o', linestyle='-', label='AIC')
-    ax1.set_xlabel('Number of bins B')
-    ax1.set_ylabel('AIC')
-    ax1.set_xticks(b_values)
-    ax1.grid(True)
+#     # Plot AIC
+#     ax1.plot(b_values, aic_list, marker='o', linestyle='-', label='AIC')
+#     ax1.set_xlabel('Number of bins B')
+#     ax1.set_ylabel('AIC')
+#     ax1.set_xticks(b_values)
+#     ax1.grid(True)
 
-    # Plot ΔAIC
-    ax2.plot(b_values[1:], delta_aic, color='red', marker='s', linestyle='--', label='ΔAIC')
-    ax2.set_ylabel('ΔAIC')
+#     # Plot ΔAIC
+#     ax2.plot(b_values[1:], delta_aic, color='red', marker='s', linestyle='--', label='ΔAIC')
+#     ax2.set_ylabel('ΔAIC')
 
-    # Legends
-    lines_1, labels_1 = ax1.get_legend_handles_labels()
-    lines_2, labels_2 = ax2.get_legend_handles_labels()
-    ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='best')
+#     # Legends
+#     lines_1, labels_1 = ax1.get_legend_handles_labels()
+#     lines_2, labels_2 = ax2.get_legend_handles_labels()
+#     ax1.legend(lines_1 + lines_2, labels_1 + labels_2, loc='best')
 
-    # plt.title('AIC and ΔAIC vs Number of bins')
-    plt.tight_layout()
-    plt.show()
+#     # plt.title('AIC and ΔAIC vs Number of bins')
+#     plt.tight_layout()
+#     plt.show()
 
 
 
@@ -3058,20 +3696,247 @@ def interpolate_data_lr04(
 
 
 
+# import matplotlib.ticker as mticker
+
+# def age_gap_ana(
+#         df_ch4: pd.DataFrame,
+#         age_min: int = 0,
+#         age_max: int = 640_000,
+#         pre_path = "pre_800_inter100.txt",
+#         n_bins: int = 6,
+#         tolerance: int = 200):
+#     """
+#     Plots CH₄ sampling resolution (Δage) against orbital precession.
+#     Raises ValueError if either record does not cover [age_min, age_max].
+#     Returns (fig_pair, fig_bar) – two ready-to-use Matplotlib Figure objects.
+#     """
+
+#     # -------------------------------------------------
+#     # 0. Validate coverage of the requested time range
+#     # -------------------------------------------------
+#     df_ch4 = df_ch4.sort_values('age').reset_index(drop=True)
+#     if not (df_ch4['age'].min() <= age_min and df_ch4['age'].max() >= age_max):
+#         raise ValueError(
+#             f"CH₄ data span {df_ch4['age'].min():g}-{df_ch4['age'].max():g} yr BP; "
+#             f"requested window {age_min}-{age_max} yr BP is outside that range."
+#         )
+
+#     # -------------------------------------------------
+#     # 1. Crop first, *then* compute Δage            ▼
+#     # -------------------------------------------------
+#     df_ch4 = df_ch4.query('age >= @age_min and age <= @age_max').reset_index(drop=True)
+#     if len(df_ch4) < 2:                               #        ▼
+#         raise ValueError("Not enough CH₄ points in the selected age window.")  # ▼
+#     df_ch4['diff_age'] = df_ch4['age'].diff().abs()
+#     df_ch4 = df_ch4.dropna(subset=['diff_age'])
+
+#     # -------------------------------------------------
+#     # 2. Load & crop the raw precession record
+#     # -------------------------------------------------
+#     df_pre = (pd.read_csv(pre_path, sep=r'\s+', header=None, engine='python')
+#                 .rename(columns={0: 'age', 1: 'pre'}))
+#     df_pre['age'] = df_pre['age'].abs() * 1000
+#     df_pre = df_pre.iloc[::-1].reset_index(drop=True)
+
+#     if not (df_pre['age'].min() <= age_min and df_pre['age'].max() >= age_max):
+#         raise ValueError(
+#             f"Precession file span {df_pre['age'].min():g}-{df_pre['age'].max():g} yr BP; "
+#             f"requested window {age_min}-{age_max} yr BP is outside that range."
+#         )
+
+#     df_pre = df_pre.query('age >= @age_min and age <= @age_max').reset_index(drop=True)
+
+#     # -------------------------------------------------
+#     # 3. Nearest-age merge
+#     # -------------------------------------------------
+#     df_merged = (pd.merge_asof(
+#                     df_ch4, df_pre,
+#                     on='age', direction='nearest', tolerance=tolerance)
+#                    .dropna(subset=['pre']))
+
+#     # -------------------------------------------------
+#     # 4a. Line plots
+#     # -------------------------------------------------
+#     fig_pair, ax = plt.subplots(2, 1, figsize=(10, 4), sharex=True,
+#                                 gridspec_kw={'height_ratios': [1.2, 1]})
+
+#     ax[0].plot(df_merged['age'], df_merged['pre'])
+#     ax[0].set_ylabel('Precession')
+#     # ax[0].invert_xaxis()
+
+#     ax[1].plot(df_merged['age'], df_merged['diff_age'])
+#     ax[1].set_ylabel('Δage (yr)')
+#     ax[1].set_xlabel('Age (yr BP)')
+#     ax[1].invert_xaxis()
+#     # get xticks
+#     xticks = ax[1].get_xticks()
+#     # let xtick labels as xticks/1000, so it is shown in kyr
+#     def kyr_formatter(x, pos):
+#         """Format x (yr BP) as kyr (no decimal)."""
+#         return f"{int(x/1_000)}"
+
+#     ax[1].xaxis.set_major_formatter(mticker.FuncFormatter(kyr_formatter))
+    
+#     fig_pair.tight_layout()
+
+#     # -------------------------------------------------
+#     # 4b. Bar chart
+#     # -------------------------------------------------
+#     df_merged['pre_bin'] = pd.cut(df_merged['pre'], n_bins, labels=False)
+#     avg_by_bin = (df_merged.groupby('pre_bin', observed=True)['diff_age']
+#                            .mean()
+#                            .rename('mean_diff_age')
+#                            .reset_index())
+
+#     fig_bar, axb = plt.subplots(figsize=(6, 3))
+#     axb.bar(avg_by_bin['pre_bin'], avg_by_bin['mean_diff_age'])
+#     axb.set_xticks(avg_by_bin['pre_bin'])
+#     axb.set_xticklabels([f'bin {i}' for i in avg_by_bin['pre_bin']])
+#     axb.set_ylabel('Mean Δage (yr)')
+#     axb.set_xlabel('Precession amplitude – equal-width bins')
+#     axb.set_title('Sampling step (Δage) vs. precession')
+#     fig_bar.tight_layout()
+
+#     return fig_pair, fig_bar
 
 
 
 
 
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+plt.rcParams.update({
+    "figure.dpi": 100,
+    "axes.linewidth": 0.8,
+    "grid.linestyle": "--",
+    "grid.alpha": 0.4,
+    "font.size": 9,          # main text
+    "axes.labelsize": 9,
+    "axes.titlesize": 9,
+    "legend.fontsize": 8,
+})
 
 
 
 
 
+def age_gap_ana(
+        df_ch4: pd.DataFrame,
+        age_min: int = 0,
+        age_max: int = 640_000,
+        pre_path = "pre_800_inter100.txt",
+        n_bins: int = 6,
+        tolerance: int = 200):
+    """
+    Plots CH₄ sampling resolution (Δage) against orbital precession.
+    Raises ValueError if either record does not cover [age_min, age_max].
+    Returns (fig_pair, fig_bar) – two ready-to-use Matplotlib Figure objects.
+    """
 
+    # -------------------------------------------------
+    # 0. Validate coverage of the requested time range
+    # -------------------------------------------------
+    df_ch4 = df_ch4.sort_values('age').reset_index(drop=True)
+    if not (df_ch4['age'].min() <= age_min and df_ch4['age'].max() >= age_max):
+        raise ValueError(
+            f"CH₄ data span {df_ch4['age'].min():g}-{df_ch4['age'].max():g} yr BP; "
+            f"requested window {age_min}-{age_max} yr BP is outside that range."
+        )
 
+    # -------------------------------------------------
+    # 1. Crop first, *then* compute Δage            ▼
+    # -------------------------------------------------
+    df_ch4 = df_ch4.query('age >= @age_min and age <= @age_max').reset_index(drop=True)
+    if len(df_ch4) < 2:                               #        ▼
+        raise ValueError("Not enough CH₄ points in the selected age window.")  # ▼
+    df_ch4['diff_age'] = df_ch4['age'].diff().abs()
+    df_ch4 = df_ch4.dropna(subset=['diff_age'])
 
+    # -------------------------------------------------
+    # 2. Load & crop the raw precession record
+    # -------------------------------------------------
+    df_pre = (pd.read_csv(pre_path, sep=r'\s+', header=None, engine='python')
+                .rename(columns={0: 'age', 1: 'pre'}))
+    df_pre['age'] = df_pre['age'].abs() * 1000
+    df_pre = df_pre.iloc[::-1].reset_index(drop=True)
 
+    if not (df_pre['age'].min() <= age_min and df_pre['age'].max() >= age_max):
+        raise ValueError(
+            f"Precession file span {df_pre['age'].min():g}-{df_pre['age'].max():g} yr BP; "
+            f"requested window {age_min}-{age_max} yr BP is outside that range."
+        )
+
+    df_pre = df_pre.query('age >= @age_min and age <= @age_max').reset_index(drop=True)
+
+    # -------------------------------------------------
+    # 3. Nearest-age merge
+    # -------------------------------------------------
+    df_merged = (pd.merge_asof(
+                    df_ch4, df_pre,
+                    on='age', direction='nearest', tolerance=tolerance)
+                   .dropna(subset=['pre']))
+
+        
+    # 4a. Pair of time-series panels
+    fig_pair, ax = plt.subplots(
+        2, 1, figsize=(4.3, 4.0), sharex=True,
+        gridspec_kw={"height_ratios": [1.2, 1]}
+    )
+
+    # -- Precession
+    ax[0].plot(df_merged["age"], df_merged["pre"],
+            lw=1.1, color="#0072B2")                 # CB-friendly blue
+    ax[0].set_ylabel("Precession (arb. u.)")
+    ax[0].set_title("(a) Orbital precession", loc="left", fontsize=9, fontweight="bold")
+    ax[0].grid(True)
+
+    # -- Δage
+    ax[1].plot(df_merged["age"], df_merged["diff_age"],
+            lw=1.1, color="#D55E00")                 # CB-friendly orange
+    ax[1].set_ylabel("Δage (yr)")
+    ax[1].set_xlabel("Age (kyr BP)")
+    ax[1].set_title("(b) Methane sampling step", loc="left", fontsize=9, fontweight="bold")
+    ax[1].grid(True)
+
+    # -- x-axis: invert and label in kyr
+
+    ax[1].invert_xaxis()
+    ax[1].xaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda x, pos: f"{int(x/1_000)}")
+    )
+
+    fig_pair.align_ylabels()
+    fig_pair.tight_layout()
+
+    # 4b. Bar chart: mean Δage per precession bin
+    df_merged["pre_bin"], bin_edges = pd.cut(
+        df_merged["pre"], n_bins, labels=False, retbins=True
+    )
+    avg_by_bin = (df_merged.groupby("pre_bin", observed=True)["diff_age"]
+                            .mean()
+                            .rename("mean_diff_age")
+                            .reset_index())
+
+    # Bar centres (bin mid-points) and widths (bin widths)
+    bin_centres = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+    bin_widths  = np.diff(bin_edges)
+
+    fig_bar, axb = plt.subplots(figsize=(3.5, 2.3))
+    axb.bar(bin_centres, avg_by_bin["mean_diff_age"],
+            width=bin_widths, align="center", edgecolor="k",
+            color="#009E73", lw=0.5)
+    axb.set_xlabel("Precession amplitude")
+    axb.set_ylabel("Mean Δage (yr)")
+    axb.set_title("Sampling resolution vs precession", fontsize=9, pad=4)
+    axb.grid(axis="y")
+
+    # X-tick labels = bin mid-points in prec units (rounded)
+    xb_labels = [f"{v:.0f}" for v in bin_centres]
+    axb.set_xticks(bin_centres)
+    axb.set_xticklabels(xb_labels, rotation=0)
+
+    fig_bar.tight_layout()
+    return fig_pair, fig_bar
 
 
 
@@ -3171,208 +4036,208 @@ def interpolate_data_forcing(df_sq, interval, if_plot=False):
 
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.signal import find_peaks
-from scipy.stats import ttest_ind
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from scipy.signal import find_peaks
+# from scipy.stats import ttest_ind
 
-def plot_phase_durations(df_pre, df_sq, lags=range(0, 901, 100)):
-    """
-    For each lag in `lags`, shifts df_pre manually (introducing NaNs),
-    truncates df_sq accordingly, computes rising/falling phase durations,
-    runs t-tests, and produces the same two-panel figure per lag.
+# def plot_phase_durations(df_pre, df_sq, lags=range(0, 901, 100)):
+#     """
+#     For each lag in `lags`, shifts df_pre manually (introducing NaNs),
+#     truncates df_sq accordingly, computes rising/falling phase durations,
+#     runs t-tests, and produces the same two-panel figure per lag.
     
-    Parameters
-    ----------
-    df_pre : pandas.DataFrame
-        Must contain a 'pre' column (precession) and matching index.
-    df_sq : pandas.DataFrame
-        Must contain a 'sq' column (square wave ±1) and matching index.
-    lags : iterable of ints, optional
-        List of integer shifts (in data points) to test.
-    """
-    pre_vals_orig = df_pre['pre'].values
-    sq_orig       = np.where(df_sq['sq'].values > 0, 1, -1)
-    N             = len(pre_vals_orig)
+#     Parameters
+#     ----------
+#     df_pre : pandas.DataFrame
+#         Must contain a 'pre' column (precession) and matching index.
+#     df_sq : pandas.DataFrame
+#         Must contain a 'sq' column (square wave ±1) and matching index.
+#     lags : iterable of ints, optional
+#         List of integer shifts (in data points) to test.
+#     """
+#     pre_vals_orig = df_pre['pre'].values
+#     sq_orig       = np.where(df_sq['sq'].values > 0, 1, -1)
+#     N             = len(pre_vals_orig)
 
-    def count_transitions(intervals, sq_sign):
-        lt, hl = [], []
-        for i0, i1 in intervals:
-            seg = sq_sign[i0:i1+1]
-            lt.append(np.sum((seg[:-1]==-1) & (seg[1:]==+1)))
-            hl.append(np.sum((seg[:-1]==+1) & (seg[1:]==-1)))
-        return lt, hl
+#     def count_transitions(intervals, sq_sign):
+#         lt, hl = [], []
+#         for i0, i1 in intervals:
+#             seg = sq_sign[i0:i1+1]
+#             lt.append(np.sum((seg[:-1]==-1) & (seg[1:]==+1)))
+#             hl.append(np.sum((seg[:-1]==+1) & (seg[1:]==-1)))
+#         return lt, hl
 
-    for lag in lags:
-        # 1) manual shift with NaNs
-        pre_shifted = np.full(N, np.nan)
-        if lag > 0:
-            pre_shifted[0:N-lag] = pre_vals_orig[lag:N]
-        elif lag < 0:
-            k = -lag
-            pre_shifted[k:N] = pre_vals_orig[0:N-k]
-        else:
-            pre_shifted[:] = pre_vals_orig
+#     for lag in lags:
+#         # 1) manual shift with NaNs
+#         pre_shifted = np.full(N, np.nan)
+#         if lag > 0:
+#             pre_shifted[0:N-lag] = pre_vals_orig[lag:N]
+#         elif lag < 0:
+#             k = -lag
+#             pre_shifted[k:N] = pre_vals_orig[0:N-k]
+#         else:
+#             pre_shifted[:] = pre_vals_orig
 
-        # 2) truncate to non-NaNs
-        valid    = ~np.isnan(pre_shifted)
-        pre_vals = pre_shifted[valid]
-        sq_sign  = sq_orig[valid]
+#         # 2) truncate to non-NaNs
+#         valid    = ~np.isnan(pre_shifted)
+#         pre_vals = pre_shifted[valid]
+#         sq_sign  = sq_orig[valid]
 
-        # 3) peak/trough detection
-        peaks,   _ = find_peaks(pre_vals)
-        troughs, _ = find_peaks(-pre_vals)
+#         # 3) peak/trough detection
+#         peaks,   _ = find_peaks(pre_vals)
+#         troughs, _ = find_peaks(-pre_vals)
 
-        # 4) rising & falling intervals
-        rising, falling = [], []
-        for t in troughs:
-            nxt = peaks[peaks > t]
-            if nxt.size: rising.append((t, nxt[0]))
-        for p in peaks:
-            nxt = troughs[troughs > p]
-            if nxt.size: falling.append((p, nxt[0]))
+#         # 4) rising & falling intervals
+#         rising, falling = [], []
+#         for t in troughs:
+#             nxt = peaks[peaks > t]
+#             if nxt.size: rising.append((t, nxt[0]))
+#         for p in peaks:
+#             nxt = troughs[troughs > p]
+#             if nxt.size: falling.append((p, nxt[0]))
 
-        # 5) compute durations for each phase
-        r_cold, r_warm = [], []
-        for i0, i1 in rising:
-            seg = sq_sign[i0:i1+1]
-            r_cold.append(np.sum(seg == -1))
-            r_warm.append(np.sum(seg == +1))
+#         # 5) compute durations for each phase
+#         r_cold, r_warm = [], []
+#         for i0, i1 in rising:
+#             seg = sq_sign[i0:i1+1]
+#             r_cold.append(np.sum(seg == -1))
+#             r_warm.append(np.sum(seg == +1))
 
-        d_cold, d_warm = [], []
-        for i0, i1 in falling:
-            seg = sq_sign[i0:i1+1]
-            d_cold.append(np.sum(seg == -1))
-            d_warm.append(np.sum(seg == +1))
+#         d_cold, d_warm = [], []
+#         for i0, i1 in falling:
+#             seg = sq_sign[i0:i1+1]
+#             d_cold.append(np.sum(seg == -1))
+#             d_warm.append(np.sum(seg == +1))
 
-        # 6) t-tests on durations
-        t_r, p_r = ttest_ind(r_cold, r_warm, equal_var=False)
-        sig_r = 'Yes' if p_r < 0.05 else 'No'
-        t_d, p_d = ttest_ind(d_cold, d_warm, equal_var=False)
-        sig_d = 'Yes' if p_d < 0.05 else 'No'
+#         # 6) t-tests on durations
+#         t_r, p_r = ttest_ind(r_cold, r_warm, equal_var=False)
+#         sig_r = 'Yes' if p_r < 0.05 else 'No'
+#         t_d, p_d = ttest_ind(d_cold, d_warm, equal_var=False)
+#         sig_d = 'Yes' if p_d < 0.05 else 'No'
 
-        # 7) plotting (identical to original)
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 4), tight_layout=True)
-        fig.suptitle(f"Lag = {lag} indices", fontsize=14)
+#         # 7) plotting (identical to original)
+#         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 4), tight_layout=True)
+#         fig.suptitle(f"Lag = {lag} indices", fontsize=14)
 
-        ax1.hist(r_cold, bins='auto', alpha=0.5, color='green', label='cold length')
-        ax1.axvline(np.mean(r_cold), color='green', linestyle='dashed', linewidth=1)
-        ax1.hist(r_warm, bins='auto', alpha=0.5, color='red',   label='warm length')
-        ax1.axvline(np.mean(r_warm), color='red', linestyle='dashed', linewidth=1)
-        ax1.set_title(f"Rising phases\n t={t_r:.2f}, p={p_r:.2e}\nSig? {sig_r}")
-        ax1.set_xlabel('Duration (data points)')
-        ax1.set_ylabel('Frequency')
-        ax1.legend()
+#         ax1.hist(r_cold, bins='auto', alpha=0.5, color='green', label='cold length')
+#         ax1.axvline(np.mean(r_cold), color='green', linestyle='dashed', linewidth=1)
+#         ax1.hist(r_warm, bins='auto', alpha=0.5, color='red',   label='warm length')
+#         ax1.axvline(np.mean(r_warm), color='red', linestyle='dashed', linewidth=1)
+#         ax1.set_title(f"Rising phases\n t={t_r:.2f}, p={p_r:.2e}\nSig? {sig_r}")
+#         ax1.set_xlabel('Duration (data points)')
+#         ax1.set_ylabel('Frequency')
+#         ax1.legend()
 
-        ax2.hist(d_cold, bins='auto', alpha=0.5, color='green', label='cold length')
-        ax2.axvline(np.mean(d_cold), color='green', linestyle='dashed', linewidth=1)
-        ax2.hist(d_warm, bins='auto', alpha=0.5, color='red',   label='warm length')
-        ax2.axvline(np.mean(d_warm), color='red', linestyle='dashed', linewidth=1)
-        ax2.set_title(f"Decreasing phases\n t={t_d:.2f}, p={p_d:.2e}\nSig? {sig_d}")
-        ax2.set_xlabel('Duration (data points)')
-        ax2.legend()
+#         ax2.hist(d_cold, bins='auto', alpha=0.5, color='green', label='cold length')
+#         ax2.axvline(np.mean(d_cold), color='green', linestyle='dashed', linewidth=1)
+#         ax2.hist(d_warm, bins='auto', alpha=0.5, color='red',   label='warm length')
+#         ax2.axvline(np.mean(d_warm), color='red', linestyle='dashed', linewidth=1)
+#         ax2.set_title(f"Decreasing phases\n t={t_d:.2f}, p={p_d:.2e}\nSig? {sig_d}")
+#         ax2.set_xlabel('Duration (data points)')
+#         ax2.legend()
 
-        plt.show()
+#         plt.show()
 
 
 
-import numpy as np
-from scipy.signal import find_peaks
-from scipy.stats import ttest_ind
-import matplotlib.pyplot as plt
+# import numpy as np
+# from scipy.signal import find_peaks
+# from scipy.stats import ttest_ind
+# import matplotlib.pyplot as plt
 
-def plot_transition_distribution(df_pre, df_sq, lags=None):
-    """
-    For each lag in `lags`, shifts df_pre manually (introducing NaNs),
-    truncates df_sq accordingly, computes rising/falling phase transitions,
-    runs t-tests, and produces the same two-panel figure per lag.
+# def plot_transition_distribution(df_pre, df_sq, lags=None):
+#     """
+#     For each lag in `lags`, shifts df_pre manually (introducing NaNs),
+#     truncates df_sq accordingly, computes rising/falling phase transitions,
+#     runs t-tests, and produces the same two-panel figure per lag.
 
-    Parameters
-    ----------
-    df_pre : pandas.DataFrame
-        Must contain a 'pre' column.
-    df_sq : pandas.DataFrame
-        Must contain a 'sq' column with values ±1.
-    lags : iterable of ints, optional
-        List of integer shifts (in data points) to test.
-        Default is range(0, 901, 100).
-    """
-    if lags is None:
-        lags = range(0, 901, 100)
+#     Parameters
+#     ----------
+#     df_pre : pandas.DataFrame
+#         Must contain a 'pre' column.
+#     df_sq : pandas.DataFrame
+#         Must contain a 'sq' column with values ±1.
+#     lags : iterable of ints, optional
+#         List of integer shifts (in data points) to test.
+#         Default is range(0, 901, 100).
+#     """
+#     if lags is None:
+#         lags = range(0, 901, 100)
 
-    pre_vals_orig = df_pre['pre'].values
-    sq_orig       = np.where(df_sq['sq'].values > 0, 1, -1)
-    N             = len(pre_vals_orig)
+#     pre_vals_orig = df_pre['pre'].values
+#     sq_orig       = np.where(df_sq['sq'].values > 0, 1, -1)
+#     N             = len(pre_vals_orig)
 
-    def count_transitions(intervals, sq_sign):
-        lt, hl = [], []
-        for i0, i1 in intervals:
-            seg = sq_sign[i0:i1+1]
-            lt.append(np.sum((seg[:-1]==-1) & (seg[1:]==+1)))
-            hl.append(np.sum((seg[:-1]==+1) & (seg[1:]==-1)))
-        return lt, hl
+#     def count_transitions(intervals, sq_sign):
+#         lt, hl = [], []
+#         for i0, i1 in intervals:
+#             seg = sq_sign[i0:i1+1]
+#             lt.append(np.sum((seg[:-1]==-1) & (seg[1:]==+1)))
+#             hl.append(np.sum((seg[:-1]==+1) & (seg[1:]==-1)))
+#         return lt, hl
 
-    for lag in lags:
-        # 1) manual shift with NaNs instead of roll()
-        pre_shifted = np.full(N, np.nan)
-        if lag > 0:
-            pre_shifted[0:N-lag] = pre_vals_orig[lag:N]
-        elif lag < 0:
-            k = -lag
-            pre_shifted[k:N] = pre_vals_orig[0:N-k]
-        else:
-            pre_shifted[:] = pre_vals_orig
+#     for lag in lags:
+#         # 1) manual shift with NaNs instead of roll()
+#         pre_shifted = np.full(N, np.nan)
+#         if lag > 0:
+#             pre_shifted[0:N-lag] = pre_vals_orig[lag:N]
+#         elif lag < 0:
+#             k = -lag
+#             pre_shifted[k:N] = pre_vals_orig[0:N-k]
+#         else:
+#             pre_shifted[:] = pre_vals_orig
 
-        # 2) mask out NaNs & truncate sq to match
-        valid    = ~np.isnan(pre_shifted)
-        pre_vals = pre_shifted[valid]
-        sq_sign  = sq_orig[valid]
+#         # 2) mask out NaNs & truncate sq to match
+#         valid    = ~np.isnan(pre_shifted)
+#         pre_vals = pre_shifted[valid]
+#         sq_sign  = sq_orig[valid]
 
-        # 3) detect peaks/troughs
-        peaks,   _ = find_peaks(pre_vals)
-        troughs, _ = find_peaks(-pre_vals)
+#         # 3) detect peaks/troughs
+#         peaks,   _ = find_peaks(pre_vals)
+#         troughs, _ = find_peaks(-pre_vals)
 
-        # 4) rising & falling intervals
-        rising, falling = [], []
-        for t in troughs:
-            nxt = peaks[peaks > t]
-            if nxt.size: rising.append((t, nxt[0]))
-        for p in peaks:
-            nxt = troughs[troughs > p]
-            if nxt.size: falling.append((p, nxt[0]))
+#         # 4) rising & falling intervals
+#         rising, falling = [], []
+#         for t in troughs:
+#             nxt = peaks[peaks > t]
+#             if nxt.size: rising.append((t, nxt[0]))
+#         for p in peaks:
+#             nxt = troughs[troughs > p]
+#             if nxt.size: falling.append((p, nxt[0]))
 
-        # 5) count transitions
-        r_lt, r_hl = count_transitions(rising,   sq_sign)
-        f_lt, f_hl = count_transitions(falling,  sq_sign)
+#         # 5) count transitions
+#         r_lt, r_hl = count_transitions(rising,   sq_sign)
+#         f_lt, f_hl = count_transitions(falling,  sq_sign)
 
-        # 6) t-tests
-        t_r, p_r = ttest_ind(r_lt, r_hl, equal_var=False)
-        sig_r = 'Yes' if p_r < 0.05 else 'No'
-        t_f, p_f = ttest_ind(f_lt, f_hl, equal_var=False)
-        sig_f = 'Yes' if p_f < 0.05 else 'No'
+#         # 6) t-tests
+#         t_r, p_r = ttest_ind(r_lt, r_hl, equal_var=False)
+#         sig_r = 'Yes' if p_r < 0.05 else 'No'
+#         t_f, p_f = ttest_ind(f_lt, f_hl, equal_var=False)
+#         sig_f = 'Yes' if p_f < 0.05 else 'No'
 
-        # 7) plotting (unchanged)
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4), tight_layout=True)
-        fig.suptitle(f"Lag = {lag} indices", fontsize=14)
+#         # 7) plotting (unchanged)
+#         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4), tight_layout=True)
+#         fig.suptitle(f"Lag = {lag} indices", fontsize=14)
 
-        ax1.hist(r_lt, bins='auto', alpha=0.5, color='blue',   label='–1→+1')
-        ax1.axvline(np.mean(r_lt), color='blue', linestyle='--')
-        ax1.hist(r_hl, bins='auto', alpha=0.5, color='orange', label='+1→–1')
-        ax1.axvline(np.mean(r_hl), color='orange', linestyle='--')
-        ax1.set_title(f"Rising phases\n t={t_r:.2f}, p={p_r:.2e}\nSig? {sig_r}")
-        ax1.set_xlabel('Transitions per rising phase')
-        ax1.set_ylabel('Count of phases')
-        ax1.legend()
+#         ax1.hist(r_lt, bins='auto', alpha=0.5, color='blue',   label='–1→+1')
+#         ax1.axvline(np.mean(r_lt), color='blue', linestyle='--')
+#         ax1.hist(r_hl, bins='auto', alpha=0.5, color='orange', label='+1→–1')
+#         ax1.axvline(np.mean(r_hl), color='orange', linestyle='--')
+#         ax1.set_title(f"Rising phases\n t={t_r:.2f}, p={p_r:.2e}\nSig? {sig_r}")
+#         ax1.set_xlabel('Transitions per rising phase')
+#         ax1.set_ylabel('Count of phases')
+#         ax1.legend()
 
-        ax2.hist(f_lt, bins='auto', alpha=0.5, color='blue',   label='–1→+1')
-        ax2.axvline(np.mean(f_lt), color='blue', linestyle='--')
-        ax2.hist(f_hl, bins='auto', alpha=0.5, color='orange', label='+1→–1')
-        ax2.axvline(np.mean(f_hl), color='orange', linestyle='--')
-        ax2.set_title(f"Decreasing phases\n t={t_f:.2f}, p={p_f:.2e}\nSig? {sig_f}")
-        ax2.set_xlabel('Transitions per decreasing phase')
-        ax2.legend()
+#         ax2.hist(f_lt, bins='auto', alpha=0.5, color='blue',   label='–1→+1')
+#         ax2.axvline(np.mean(f_lt), color='blue', linestyle='--')
+#         ax2.hist(f_hl, bins='auto', alpha=0.5, color='orange', label='+1→–1')
+#         ax2.axvline(np.mean(f_hl), color='orange', linestyle='--')
+#         ax2.set_title(f"Decreasing phases\n t={t_f:.2f}, p={p_f:.2e}\nSig? {sig_f}")
+#         ax2.set_xlabel('Transitions per decreasing phase')
+#         ax2.legend()
 
-        plt.show()
+#         plt.show()
 
 
 
