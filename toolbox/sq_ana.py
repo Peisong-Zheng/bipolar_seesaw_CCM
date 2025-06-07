@@ -16,6 +16,219 @@ from joblib import Parallel, delayed
 
 
 
+# # ------------------------------------------------------------------
+# #  C) Helper : build_state()      (was build_state_with_threshold)
+# #              ----------------------------------------------------
+# def gen_ther_data(signal, s_mult, sigma_ref=None):
+#     """
+#     Return a 0/1 state series given an N×σ threshold.
+
+#     Parameters
+#     ----------
+#     signal     : 1-D ndarray
+#     s_mult     : float
+#         Sigma-multiplier (e.g., 1.5 → threshold = 1.5·σ).
+#     sigma_ref  : float or None
+#         If given, use this reference σ.  Otherwise σ is computed
+#         from *signal* itself.
+
+#     Notes
+#     -----
+#     • state = 0  when  signal ≤ −thr  
+#     • state = 1  when  signal ≥ +thr  
+#     • “neutral” values are forward-filled; leading NaNs filled
+#       with the first valid state (exactly as before).
+#     """
+#     thr = s_mult * (sigma_ref if sigma_ref is not None else np.std(signal))
+
+#     st = np.full_like(signal, np.nan, float)
+#     st[signal <= -thr] = 0
+#     st[signal >=  thr] = 1
+
+#     for i in range(1, len(st)):                 # carry forward
+#         if np.isnan(st[i]):
+#             st[i] = st[i-1]
+#     first = np.where(~np.isnan(st))[0][0]       # fill leading part
+#     st[:first] = st[first]
+#     return st.astype(int)
+
+
+
+
+
+
+import numpy as np, matplotlib.pyplot as plt, pandas as pd
+from matplotlib.gridspec import GridSpec
+from matplotlib.collections import LineCollection
+from pyinform import transfer_entropy
+
+# ------------------------------------------------------------
+# short helper: build 0/1 sequence from σ-multiplier
+# ------------------------------------------------------------
+def _state(sig, s_mult, sigma_ref=None):
+    thr = s_mult * (sigma_ref if sigma_ref is not None else np.std(sig))
+    st  = np.full_like(sig, np.nan, float)
+    st[sig <= -thr] = 0
+    st[sig >=  thr] = 1
+    for i in range(1, len(st)):          # carry forward
+        if np.isnan(st[i]): st[i] = st[i-1]
+    first = np.where(~np.isnan(st))[0][0]
+    st[:first] = st[first]
+    return st.astype(int)
+
+# ------------------------------------------------------------
+#  main analysis
+# ------------------------------------------------------------
+def thre_data_ana(
+    forcing, sq,
+    ages = None,  # optional time axis for plots
+    *,
+    bins_pre       = 6,
+    sigma_mult     = 1.5,
+    n_surr         = 200,
+    nbins_phase    = 8,
+    random_seed    = 0
+):
+    """
+    Transfer-entropy workflow with threshold-defined MCV states.
+
+    Parameters
+    ----------
+    forcing, sq : 1-D arrays (oldest→youngest or youngest→oldest — any order)
+    bins_pre    : number of amplitude bins for the forcing
+    sigma_mult  : σ-multiplier that defines ±thr
+    n_surr      : # permutation surrogates for global TE test
+    nbins_phase : # bins when discretising wavelet phase (unused here but
+                  kept for interface homogeneity)
+    """
+    # ---------- 1. chronological order (oldest → youngest) --------------
+    
+    f = forcing[::-1]
+    s = sq      [::-1]
+
+    if ages is None:
+        ages = np.arange(len(f))            # dummy axis for plots
+
+    # ---------- 2. build threshold state -------------------------------
+    state = _state(s, sigma_mult)       # 0 = cold, 1 = warm
+
+    # ---------- 3. discretise forcing (equal-width amplitude bins) -----
+    bins = np.histogram_bin_edges(f, bins=bins_pre)
+    x_disc = np.clip(np.digitize(f, bins) - 1, 0, bins_pre-1)
+
+    # ---------- 4. global TE + surrogates ------------------------------
+    te_xy = transfer_entropy(x_disc[:-1], state[1:], k=1)
+    te_yx = transfer_entropy(state[:-1],  x_disc[1:], k=1)
+
+    rng = np.random.default_rng(random_seed)
+    null_xy = np.empty(n_surr)
+    null_yx = np.empty(n_surr)
+    for i in range(n_surr):
+        null_xy[i] = transfer_entropy(rng.permutation(x_disc)[:-1], state[1:], k=1)
+        null_yx[i] = transfer_entropy(rng.permutation(state)[:-1],  x_disc[1:], k=1)
+
+    # two-tailed p
+    p_xy = (2*min((null_xy>=te_xy).sum(), (null_xy<=te_xy).sum()) + 1)/(n_surr+1)
+    p_yx = (2*min((null_yx>=te_yx).sum(), (null_yx<=te_yx).sum()) + 1)/(n_surr+1)
+
+    # ---------- 5. local TE, P(flip), P(stay) ---------------------------
+    local_te = transfer_entropy(x_disc, state, k=1, local=True).flatten()[1:]
+    x_prev, y_prev, y_next = x_disc[:-1], state[:-1], state[1:]
+
+    counts = np.zeros((bins_pre, 2, 2), int)
+    for xi, yi, zi in zip(x_prev, y_prev, y_next):
+        counts[xi, yi, zi] += 1
+    totals = counts.sum(axis=2, keepdims=True)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        cond_p = counts / totals
+
+    p_flip = np.array([cond_p[x,y,1-y] for x,y in zip(x_prev,y_prev)])
+    p_stay = np.array([cond_p[x,y,  y] for x,y in zip(x_prev,y_prev)])
+
+    N = min(len(local_te), len(p_flip))
+    t_plot = ages[1:1+N]
+
+    # ---------- 6. figures ---------------------------------------------
+    # 6a. TE null distributions  (colours swapped vs. your previous draft)
+    plt.figure(figsize=(7,3.3))
+    plt.hist(null_xy, bins=25, color='#fd8d3c', alpha=.7, label='null  forcing→MCV')
+    plt.hist(null_yx, bins=25, color='#6baed6', alpha=.7, label='null  MCV→forcing')
+    plt.axvline(te_xy, color='#a63603', lw=2, label=f'obs forcing→MCV (p={p_xy:.3f})')
+    plt.axvline(te_yx, color='#08519c', lw=2, label=f'obs MCV→forcing (p={p_yx:.3f})')
+    plt.xlabel('transfer entropy (bits)'); plt.ylabel('count')
+    plt.legend(frameon=True); plt.tight_layout()
+
+    # 6b. Stacked time-series plot
+    fig = plt.figure(figsize=(10,6))
+    gs  = GridSpec(3,1, height_ratios=[0.7,0.9,1.1], hspace=0.07)
+
+    axA = fig.add_subplot(gs[0])
+    axA.plot(ages, f, lw=0.8, color='k'); axA.set_ylabel('forcing')
+    axA.invert_xaxis(); axA.tick_params(axis='x', labelbottom=False)
+
+    axB = fig.add_subplot(gs[1], sharex=axA)
+    axB.plot(t_plot, local_te[:N], lw=0.8, color='C0')
+    axB.set_ylabel('local TE'); axB.tick_params(axis='x', labelbottom=False)
+
+    axC = fig.add_subplot(gs[2], sharex=axA)
+    lnF, = axC.plot(t_plot, p_flip[:N],  color='C1', label='P(flip)')
+    axD   = axC.twinx()
+    lnS, = axD.plot(t_plot, p_stay[:N],  color='C2', label='P(stay)')
+    axC.set_ylabel('P(flip)', color='C1'); axD.set_ylabel('P(stay)', color='C2')
+    axC.set_xlabel('Age index'); axC.legend([lnF,lnS], ['P(flip)','P(stay)'])
+    plt.show()
+
+    return {'TE_xy': te_xy, 'p_xy': p_xy,
+            'TE_yx': te_yx, 'p_yx': p_yx,
+            'local_TE': local_te, 'p_flip': p_flip, 'p_stay': p_stay}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # import numpy as np
 # import pywt
 # import matplotlib.pyplot as plt
@@ -336,8 +549,8 @@ def freq_resolved_te(
         im2 = ax[2].imshow(te_mat, origin='upper', aspect='auto',
                         cmap=cmap, extent=extent_te, vmin=np.quantile(te_mat,0.5), vmax=te_mat.max())
         ax[2].set_title('TE  (source phases → target phases)')
-        ax[2].set_xlabel(f'{target_vname} period (ka)')
-        ax[2].set_ylabel(f'{source_vname} period (ka)')
+        ax[2].set_xlabel(f'{target_vname} period (kyr)')
+        ax[2].set_ylabel(f'{source_vname} period (kyr)')
         plt.colorbar(im2, ax=ax[2], fraction=.046)
 
         plt.tight_layout(); plt.show()
@@ -3942,8 +4155,233 @@ def age_gap_ana(
 
 
 
+# import numpy as np
+# import pandas as pd
+# import matplotlib.pyplot as plt
+# from pyinform import transfer_entropy
+# import matplotlib.ticker as mticker
+
+# # ──────────────────────────────────────────────────────────────────────────────
+# # main driver
+# # ──────────────────────────────────────────────────────────────────────────────
+# def te_vs_dt_scan(
+#         df_sq_raw,                           # your raw filt_ch4 DataFrame
+#         dt_grid,                             # iterable of resampling steps (yr)
+#         *,                                   # keyword-only after here
+#         k=1,                                 # TE history length
+#         forcing_bins=6, sq_bins=2,
+#         n_surr=100, alpha=0.05,
+#         sq_method='hist',                    # 'hist', 'quantile', 'kmeans'
+#         dpi=150, figsize=(4.2, 3.2),
+#         return_fig=True):
+#     """
+#     Compute & plot TE(pre → sq) versus resampling interval Δt.
+
+#     Returns
+#     -------
+#     results : pandas.DataFrame
+#         Columns: ['dt', 'te_xy', 'p_xy', 'te_yx', 'p_yx', 'sig_uni']
+#     (fig, ax) : Matplotlib objects   [only if return_fig=True]
+#     """
+#     results = []
+
+#     for dt in dt_grid:
+#         # ── 1. resample series ────────────────────────────────────────────────
+#         df_sq_i, df_pre_i, _ = sa.interpolate_data_forcing(
+#             df_sq_raw.copy(), interval=dt, if_plot=False)
+
+#         # driver = pre, target = sq
+#         x = df_pre_i['pre'].to_numpy()[::-1]          # reverse → chronological
+#         y = df_sq_i.iloc[:, 1].to_numpy()[::-1]       # second column = filt_ch4
+
+#         # ── 2. discretise both series exactly like your TE routine ────────────
+#         x_disc = np.digitize(x, np.histogram_bin_edges(x, forcing_bins)) - 1
+
+#         if sq_method == 'quantile':
+#             ybins = np.quantile(y, np.linspace(0, 1, sq_bins + 1))
+#             y_disc = np.digitize(y, ybins) - 1
+#         elif sq_method == 'kmeans':
+#             from sklearn.cluster import KMeans
+#             y_disc = KMeans(n_clusters=sq_bins, n_init=10,
+#                             random_state=0).fit_predict(y.reshape(-1, 1))
+#         else:  # default = 'hist'
+#             y_disc = (np.digitize(
+#                 y, np.histogram_bin_edges(y, sq_bins)) - 1)
+
+#         # ── 3. empirical TE values ────────────────────────────────────────────
+#         te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
+#         te_yx = transfer_entropy(y_disc[:-1], x_disc[1:], k=k)
+
+#         # ── 4. surrogate distributions & p-values ─────────────────────────────
+#         null_xy = np.empty(n_surr)
+#         null_yx = np.empty(n_surr)
+#         for i in range(n_surr):
+#             null_xy[i] = transfer_entropy(
+#                 np.random.permutation(x_disc)[:-1], y_disc[1:], k=k)
+#             null_yx[i] = transfer_entropy(
+#                 np.random.permutation(y_disc)[:-1], x_disc[1:], k=k)
+
+#         p_xy = (null_xy >= te_xy).sum() / n_surr
+#         p_yx = (null_yx >= te_yx).sum() / n_surr
+
+#         results.append(dict(dt=dt, te_xy=te_xy, p_xy=p_xy,
+#                             te_yx=te_yx, p_yx=p_yx,
+#                             sig_uni=(p_xy < alpha and p_yx >= alpha)))
+
+#     results = pd.DataFrame(results).sort_values('dt').reset_index(drop=True)
+
+#     # ── 5. plotting ──────────────────────────────────────────────────────────
+#     if not return_fig:
+#         return results
+
+#     fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+#     ax.plot(results['dt'], results['te_xy'],
+#             color='0.3', lw=1.2, marker='o',
+#             mfc='none', label='TE (pre → sq)')
+
+#     # highlight *unidirectionally* significant points
+#     sig = results['sig_uni']
+#     ax.scatter(results.loc[sig, 'dt'],
+#                results.loc[sig, 'te_xy'],
+#                s=60, color='#D55E00', zorder=5,
+#                label=f'Significant (α={alpha})')
+
+#     # optional: show reverse TE for context (grey dashed)
+#     ax.plot(results['dt'], results['te_yx'],
+#             ls='--', lw=1, color='0.6', label='TE (sq → pre)')
+
+#     ax.set_xscale('log')
+#     ax.set_xlabel('Resampling interval Δt (yr)')
+#     ax.set_ylabel('Transfer Entropy (bits)')
+#     ax.set_title('Scale-dependence of TE  (pre → sq)')
+#     ax.grid(True, which='both', alpha=0.3)
+#     ax.xaxis.set_major_formatter(mticker.FormatStrFormatter('%g'))
+#     ax.legend(frameon=True, fontsize=8)
+#     fig.tight_layout()
+
+#     return results, (fig, ax)
 
 
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from pyinform import transfer_entropy
+import matplotlib.ticker as mticker
+
+# ──────────────────────────────────────────────────────────────────────────────
+def te_vs_dt_scan(
+        df_sq_raw,
+        dt_grid,                 # iterable of resampling steps (yr)
+        *,                       # keyword-only after here
+        forcing='pre',           # 'pre' or 'obl'
+        k=1,                     # TE history length
+        forcing_bins=6, sq_bins=2,
+        n_surr=100, alpha=0.05,
+        sq_method='hist',        # 'hist', 'quantile', 'kmeans'
+        dpi=150, figsize=(4.2, 3.2),
+        return_fig=True):
+    """
+    Compute & plot TE(forcing → sq) versus resampling interval Δt.
+
+    Parameters
+    ----------
+    forcing : {'pre', 'obl'}
+        Which astronomical forcing to treat as the driver time-series.
+
+    Returns
+    -------
+    results : pandas.DataFrame
+        Columns ['dt','te_xy','p_xy','te_yx','p_yx','sig_uni']
+    (fig, ax) : Matplotlib Figure and Axes (only if return_fig=True)
+    """
+    if forcing not in {'pre', 'obl'}:
+        raise ValueError("forcing must be 'pre' or 'obl'")
+
+    results = []
+
+    # ------------------------------------------------------------------ loop over Δt
+    for dt in dt_grid:
+        df_sq_i, df_pre_i, df_obl_i = sa.interpolate_data_forcing(
+            df_sq_raw.copy(), interval=dt, if_plot=False)
+
+        # choose the driver series -------------------------------------
+        if forcing == 'pre':
+            x = df_pre_i['pre'].to_numpy()[::-1]      # chronological order
+            y_label = 'TE (pre → sq)'
+            y_rev   = 'TE (sq → pre)'
+        else:  # 'obl'
+            x = df_obl_i['obl'].to_numpy()[::-1]
+            y_label = 'TE (obl → sq)'
+            y_rev   = 'TE (sq → obl)'
+
+        y = df_sq_i.iloc[:, 1].to_numpy()[::-1]       # filt_ch4 target
+
+        # --------------- discretise -----------------------------------
+        x_disc = np.digitize(x, np.histogram_bin_edges(x, forcing_bins)) - 1
+
+        if sq_method == 'quantile':
+            ybins = np.quantile(y, np.linspace(0, 1, sq_bins + 1))
+            y_disc = np.digitize(y, ybins) - 1
+        elif sq_method == 'kmeans':
+            from sklearn.cluster import KMeans
+            y_disc = KMeans(n_clusters=sq_bins, n_init=10,
+                            random_state=0).fit_predict(y.reshape(-1, 1))
+        else:  # 'hist'
+            y_disc = (np.digitize(
+                y, np.histogram_bin_edges(y, sq_bins)) - 1)
+
+        # --------------- empirical TE ---------------------------------
+        te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
+        te_yx = transfer_entropy(y_disc[:-1], x_disc[1:], k=k)
+
+        # --------------- surrogate test -------------------------------
+        null_xy = np.empty(n_surr)
+        null_yx = np.empty(n_surr)
+        for i in range(n_surr):
+            null_xy[i] = transfer_entropy(
+                np.random.permutation(x_disc)[:-1], y_disc[1:], k=k)
+            null_yx[i] = transfer_entropy(
+                np.random.permutation(y_disc)[:-1], x_disc[1:], k=k)
+
+        p_xy = (null_xy >= te_xy).sum() / n_surr
+        p_yx = (null_yx >= te_yx).sum() / n_surr
+
+        results.append(dict(dt=dt, te_xy=te_xy, p_xy=p_xy,
+                            te_yx=te_yx, p_yx=p_yx,
+                            sig_uni=(p_xy < alpha and p_yx >= alpha)))
+
+    results = pd.DataFrame(results).sort_values('dt').reset_index(drop=True)
+
+    # ------------------------------------------------------------------ plotting
+    if not return_fig:
+        return results
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+    ax.plot(results['dt'], results['te_xy'],
+            color='0.3', lw=1.2, marker='o',
+            mfc='none', label=y_label)
+
+    # highlight significant points
+    sig = results['sig_uni']
+    ax.scatter(results.loc[sig, 'dt'],
+               results.loc[sig, 'te_xy'],
+               s=60, color='#D55E00', zorder=5,
+               label=f'Significant (α={alpha})')
+
+    # show reverse TE
+    ax.plot(results['dt'], results['te_yx'],
+            ls='--', lw=1, color='0.6', label=y_rev)
+
+    ax.set_xscale('log')
+    ax.set_xlabel('Resampling interval Δt (yr)')
+    ax.set_ylabel('Transfer Entropy (bits)')
+    ax.set_title(f'Scale-dependence of TE  ({forcing} → sq)')
+    ax.grid(True, which='both', alpha=0.3)
+    ax.xaxis.set_major_formatter(mticker.FormatStrFormatter('%g'))
+    ax.legend(frameon=True, fontsize=8)
+    fig.tight_layout()
+
+    return results, (fig, ax)
 
 
 
