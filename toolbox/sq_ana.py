@@ -16,42 +16,6 @@ from joblib import Parallel, delayed
 
 
 
-# # ------------------------------------------------------------------
-# #  C) Helper : build_state()      (was build_state_with_threshold)
-# #              ----------------------------------------------------
-# def gen_ther_data(signal, s_mult, sigma_ref=None):
-#     """
-#     Return a 0/1 state series given an N×σ threshold.
-
-#     Parameters
-#     ----------
-#     signal     : 1-D ndarray
-#     s_mult     : float
-#         Sigma-multiplier (e.g., 1.5 → threshold = 1.5·σ).
-#     sigma_ref  : float or None
-#         If given, use this reference σ.  Otherwise σ is computed
-#         from *signal* itself.
-
-#     Notes
-#     -----
-#     • state = 0  when  signal ≤ −thr  
-#     • state = 1  when  signal ≥ +thr  
-#     • “neutral” values are forward-filled; leading NaNs filled
-#       with the first valid state (exactly as before).
-#     """
-#     thr = s_mult * (sigma_ref if sigma_ref is not None else np.std(signal))
-
-#     st = np.full_like(signal, np.nan, float)
-#     st[signal <= -thr] = 0
-#     st[signal >=  thr] = 1
-
-#     for i in range(1, len(st)):                 # carry forward
-#         if np.isnan(st[i]):
-#             st[i] = st[i-1]
-#     first = np.where(~np.isnan(st))[0][0]       # fill leading part
-#     st[:first] = st[first]
-#     return st.astype(int)
-
 
 
 
@@ -1398,7 +1362,9 @@ def prob_prebins_diffbar_surr(
     nbins_pre=6,
     n_surr=100,
     alpha=0.05,
-    random_state=None
+    random_state=None,
+    y_min=0.6,
+    y_max=1.0
 ):
     """
     Bar plot of Δ = P(stay)-P(flip) per pre-bin
@@ -1473,13 +1439,13 @@ def prob_prebins_diffbar_surr(
 
     # annotate Δ and p
     for xi, d, pv in zip(x, delta_obs, pvals):
-        ax.text(xi, d + 0.04*np.sign(d),
+        ax.text(xi, d + 0.02*np.sign(d),
                 f'{d:+.2f}\n(p={pv:.3f})',
                 ha='center',
                 va='bottom' if d>=0 else 'top',
                 fontsize=8)
     # … (labels, title, annotations of Δ and p remain the same) …
-    ax.set_ylim(0.6, 1.01)
+    ax.set_ylim(y_min, y_max)
 
     ax.set_xticks(x)
     ax.set_xlabel(f'{forcing_column} bin (0 … {nbins_pre-1})')
@@ -1487,6 +1453,10 @@ def prob_prebins_diffbar_surr(
     # 2) Replace the two annotate-arrows with coloured LineCollections
     y0, y1 = ax.get_ylim()
     y_arrow = y0 + 0.03*(y1 - y0)
+
+    # set the linewidth of spines
+    for spine in ax.spines.values():
+        spine.set_linewidth(1.5)
     
     # helper to draw a gradient arrow from x_start→x_end
     def gradient_arrow(x_start, x_end, y, cmap, norm, ax, head_size=100, dir='left'):
