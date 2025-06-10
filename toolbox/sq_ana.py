@@ -2213,6 +2213,7 @@ def transfer_entropy_surrogate_test(
     forcing_bins=4, sq_bins=2,
     n_surr=100, p=0.05, 
     sq_method='hist',  # options: 'hist', 'quantile', 'kmeans'
+    binary=False,
     if_plot=True, dpi=100
 ):
     """
@@ -2225,23 +2226,27 @@ def transfer_entropy_surrogate_test(
 
     # Discretize sq series
     if sq_method == 'quantile':
+        # xbins = np.quantile(x, np.linspace(0, 1, forcing_bins + 1))
         ybins = np.quantile(y, np.linspace(0, 1, sq_bins + 1))
         y_disc = np.digitize(y, ybins) - 1
     elif sq_method == 'hist':
+        # xbins = np.histogram_bin_edges(x, bins=forcing_bins)
         ybins = np.histogram_bin_edges(y, bins=sq_bins)
         y_disc = np.digitize(y, ybins) - 1
 
     elif sq_method == 'kmeans':
+        # xbins = np.histogram_bin_edges(x, bins=forcing_bins)
         # Fit k-means on the values
         km = KMeans(n_clusters=sq_bins, n_init=10, random_state=0)
         y_disc = km.fit_predict(y.reshape(-1, 1))
     else:
         raise ValueError(f"Unknown sq_method '{sq_method}'. Use 'hist', 'quantile', or 'kmeans'.")
 
-
-
+    if binary:
+        y_disc = y
 
     xbins = np.histogram_bin_edges(x, bins=forcing_bins)
+    # xbins = np.histogram_bin_edges(x, bins=forcing_bins)
     x_disc = np.digitize(x, xbins) - 1
 
     
@@ -2634,6 +2639,140 @@ def age_gap_ana(
 
     fig_bar.tight_layout()
     return fig_pair, fig_bar
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+
+def age_gap_interactive(
+    df_ch4: pd.DataFrame,
+    age_min: int = 0,
+    age_max: int = 640_000,
+    H_line: int = 100
+) -> go.Figure:
+    """
+    Computes and plots the methane sampling age step (Δage) over time interactively using Plotly,
+    and prints the maximum Δage within the specified age window.
+
+    Parameters
+    ----------
+    df_ch4 : pd.DataFrame
+        DataFrame containing at least an 'age' column (years BP).
+    age_min : int, optional
+        Minimum age (yr BP) to include in the analysis. Default is 0.
+    age_max : int, optional
+        Maximum age (yr BP) to include in the analysis. Default is 640,000.
+
+    Returns
+    -------
+    fig : plotly.graph_objects.Figure
+        Interactive Plotly figure of Δage vs. age.
+
+    Raises
+    ------
+    ValueError
+        If the data does not span the requested age range or has fewer than 2 points.
+    """
+    # Ensure sorted
+    df = df_ch4.sort_values('age').reset_index(drop=True)
+
+    # Validate coverage
+    if df['age'].min() > age_min or df['age'].max() < age_max:
+        raise ValueError(
+            f"Data span {df['age'].min():g}-{df['age'].max():g} yr BP; "
+            f"requested window {age_min}-{age_max} yr BP is outside that range."
+        )
+
+    # Crop to window
+    df = df.query('age >= @age_min and age <= @age_max').reset_index(drop=True)
+    if len(df) < 2:
+        raise ValueError("Not enough data points in the selected age window.")
+
+    # Compute Δage
+    df['diff_age'] = df['age'].diff().abs()
+    df = df.dropna(subset=['diff_age'])
+
+    # Find and print maximum Δage
+    max_gap = df['diff_age'].max()
+    print(f"Maximum Δage within {age_min}-{age_max} yr BP: {max_gap:.0f} years")
+    # print 95% quantile
+    quantile_95 = df['diff_age'].quantile(0.95)
+    print(f"95% quantile of Δage: {quantile_95:.0f} years")
+
+    # Interactive plot
+    fig = px.line(
+        df,
+        x='age',
+        y='diff_age',
+        labels={
+            'age': 'Age (yr BP)',
+            'diff_age': 'Δage (yr)'
+        },
+        title=''
+    )
+
+    # plot a vertical line at H_line
+    fig.add_shape(
+        type='line',
+        x0=age_min, x1=age_max,
+        y0=H_line, y1=H_line,
+        line=dict(color='red', width=1, dash='dash'),
+        name='H Line'
+    )
+
+    # Invert x-axis to show decreasing age
+    fig.update_xaxes(autorange='reversed')
+
+    fig.update_layout(
+        xaxis_title='Age (kyr BP)',
+        yaxis_title='Δage (yr)',
+        title=dict(x=0.5)
+    )
+
+    return fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
