@@ -398,7 +398,8 @@ def freq_resolved_te(
     def build_scales(min_p, max_p, n_sc):
         if np.isclose(min_p, max_p):
             ctr = min_p
-            periods = ctr * np.geomspace(0.8, 1.2, n_sc)
+            # periods = ctr * np.geomspace(0.8, 1.2, n_sc)
+            periods = ctr * np.geomspace(0, 1, n_sc)
         else:
             periods = np.geomspace(min_p, max_p, n_sc)
         return periods, periods * fc / sampling_period
@@ -407,6 +408,7 @@ def freq_resolved_te(
                                        n_src_scales)
     periods_y, scales_y = build_scales(trg_min_period, trg_max_period,
                                        n_trg_scales)
+    print(scales_y)
 
     # ---------- 1. CWT -----------------------------------------
     coeffs_x, _ = pywt.cwt(x, scales_x, wavelet,
@@ -437,51 +439,6 @@ def freq_resolved_te(
 
     # ---------- 4. plots ---------------------------------------
     if plot:
-        # t_ka = np.arange(len(x)) * sampling_period / 1000  # time axis in ka
-        # # extent_x = [t_ka[0], t_ka[-1],
-        # #             periods_x[-1]/1000, periods_x[0]/1000]
-        # # extent_y = [t_ka[0], t_ka[-1],
-        # #             periods_y[-1]/1000, periods_y[0]/1000]
-
-        # extent_x = [t_ka[0], t_ka[-1],
-        #             periods_x[-1]/1000, periods_x[0]/1000]
-        # extent_y = [t_ka[0], t_ka[-1],
-        #             periods_y[-1]/1000, periods_y[0]/1000]
-
-        # fig, ax = plt.subplots(1, 3, figsize=(15, 5),
-        #                        gridspec_kw={'width_ratios':[1,1,1.3]})
-
-        # im0 = ax[0].imshow(pow_x, origin='upper', aspect='auto',
-        #                    cmap='hot', extent=extent_x)
-        # ax[0].set_title('source scalogram (pre)')
-        # ax[0].set_xlabel('time (ka BP)')
-        # ax[0].set_ylabel('period (ka)')
-        # plt.colorbar(im0, ax=ax[0], fraction=.046)
-
-        # im1 = ax[1].imshow(pow_y, origin='upper', aspect='auto',
-        #                    cmap='hot', extent=extent_y)
-        # ax[1].set_title('target scalogram (sq)')
-        # ax[1].set_xlabel('time (ka BP)')
-        # plt.colorbar(im1, ax=ax[1], fraction=.046)
-
-        # # TE matrix with period axes
-        # im2 = ax[2].imshow(te_mat, origin='lower', aspect='auto',
-        #                    cmap=cmap,
-        #                    extent=[periods_y[0]/1000, periods_y[-1]/1000,
-        #                            periods_x[0]/1000, periods_x[-1]/1000])
-        # ax[2].set_title('TE  (source period → target period)')
-        # ax[2].set_xlabel('target period (ka)')
-        # ax[2].set_ylabel('source period (ka)')
-
-        # # for a in ax[:2]:
-        # #     a.set_yscale('log')
-        # #     a.invert_yaxis()       # smaller periods at bottom, like a spectrogram
-        # # ax[2].set_yscale('log')
-        # # ax[2].set_xscale('log')
-
-        # plt.colorbar(im2, ax=ax[2], fraction=.046)
-
-        # plt.tight_layout(); plt.show()
         # --- build extents -------------------------------------------------
         t_ka = np.arange(len(x)) * sampling_period / 1000   # time axis in ka
 
@@ -521,6 +478,165 @@ def freq_resolved_te(
 
 
     return te_mat, periods_x, periods_y
+
+
+
+
+
+
+
+
+
+
+import numpy as np, pywt, matplotlib.pyplot as plt
+from pyinform import transfer_entropy
+
+# ----------------------------------------------------------------------
+# 1. Decide on one “global” target-period grid (log-spaced is convenient)
+#    Do this once – outside the function – and reuse it.
+TRG_PERIODS_GLOBAL = np.geomspace(100,     # 0.1 kyr
+                                  3_000,   #   3 kyr
+                                  64)      # same as old n_trg_scales
+# ----------------------------------------------------------------------
+
+def freq_resolved_te_fixed_grid(
+    x, y, *,
+    wavelet='cmor1.5-1.0',
+    sampling_period=10,          # yr/sample
+    # ---- source (pre) band -----------------------------------
+    src_min_period=20_000,
+    src_max_period=20_000,
+    n_src_scales=3,
+    # ---- target band *limits* for THIS call ------------------
+    trg_min_period=100,          # yr
+    trg_max_period=3_000,        # yr
+    k=1,
+    plot=True,
+    cmap='viridis',
+    source_vname='Precession',
+    target_vname='CH₄ MCV',
+    periods_y_global=TRG_PERIODS_GLOBAL,   # <<<< NEW
+):
+    """Transfer-entropy map with an *immutable* target-period grid."""
+    # ----------------------------------------------------------
+    x = x[::-1];  y = y[::-1]            # reverse chronological order
+    if len(x) != len(y):
+        raise ValueError("x and y must have equal length")
+
+    fc = pywt.central_frequency(wavelet)
+
+    # ---------- source scales (unchanged) ---------------------
+    if np.isclose(src_min_period, src_max_period):
+        periods_x = src_min_period * np.geomspace(0.8, 1.2, n_src_scales)
+    else:
+        periods_x = np.geomspace(src_min_period, src_max_period,
+                                 n_src_scales)
+    scales_x = periods_x * fc / sampling_period
+
+    # ---------- target scales (FIXED GRID) --------------------
+    periods_y = np.asarray(periods_y_global)
+    scales_y  = periods_y * fc / sampling_period
+
+    # keep indices of columns inside the requested band
+    col_mask = (periods_y >= trg_min_period) & (periods_y <= trg_max_period)
+
+    # ---------- 1. CWT ----------------------------------------
+    coeffs_x, _ = pywt.cwt(x, scales_x, wavelet,
+                           sampling_period=sampling_period)
+    coeffs_y, _ = pywt.cwt(y, scales_y, wavelet,
+                           sampling_period=sampling_period)
+
+    pow_x = np.abs(coeffs_x)**2
+    pow_y = np.abs(coeffs_y)**2
+
+    # ---------- 2. phase discretisation -----------------------
+    bins = np.linspace(-np.pi, np.pi, 9)
+    disc_x = np.digitize(np.angle(coeffs_x), bins) - 1
+    disc_y = np.digitize(np.angle(coeffs_y), bins) - 1
+
+    # ---------- 3. TE matrix ----------------------------------
+    te_mat = np.empty((len(scales_x), len(scales_y)))
+    for i in range(len(scales_x)):          # source scale
+        for j in range(len(scales_y)):      # target scale
+            te_mat[i, j] = transfer_entropy(
+                disc_x[i, :-1], disc_y[j, 1:], k=k
+            )
+
+    # mask out-of-band columns so they plot in the right place but
+    # do not influence the colour scale
+    te_mat_masked = np.where(col_mask, te_mat, np.nan)
+
+    # ---------- 4. plotting -----------------------------------
+    if plot:
+        t_ka = np.arange(len(x))*sampling_period/1000  # kyr axis
+        extent_src = [t_ka[0], t_ka[-1],
+                      periods_x[0]/1000, periods_x[-1]/1000]
+        extent_trg = [t_ka[0], t_ka[-1],
+                      periods_y[0]/1000, periods_y[-1]/1000]
+        extent_te  = [periods_y[0]/1000, periods_y[-1]/1000,
+                      periods_x[0]/1000, periods_x[-1]/1000]
+
+        fig, ax = plt.subplots(1, 3, figsize=(15, 3.5),
+                               gridspec_kw={'width_ratios':[1,1,1.3]})
+
+        im0 = ax[0].imshow(pow_x, origin='upper', aspect='auto',
+                           cmap='hot', extent=extent_src)
+        ax[0].set_title(f'source scalogram ({source_vname})')
+        ax[0].set_xlabel('time (ka BP)');  ax[0].set_ylabel('period (ka)')
+        plt.colorbar(im0, ax=ax[0], fraction=.046)
+
+        im1 = ax[1].imshow(pow_y, origin='upper', aspect='auto',
+                           cmap='hot', extent=extent_trg)
+        ax[1].set_title(f'target scalogram ({target_vname})')
+        ax[1].set_xlabel('time (ka BP)')
+        plt.colorbar(im1, ax=ax[1], fraction=.046)
+
+        im2 = ax[2].imshow(te_mat_masked, origin='upper', aspect='auto',
+                           cmap=cmap, extent=extent_te,
+                           vmin=np.nanquantile(te_mat_masked, 0.5),
+                           vmax=np.nanmax(te_mat_masked))
+        ax[2].set_title('TE  (source phases → target phases)')
+        ax[2].set_xlabel(f'{target_vname} period (kyr)')
+        ax[2].set_ylabel(f'{source_vname} period (kyr)')
+        ax[2].set_xscale('log')   # <<<< log axis removes misleading shifts
+        plt.colorbar(im2, ax=ax[2], fraction=.046)
+
+        plt.tight_layout(); plt.show()
+
+    return te_mat_masked, periods_x, periods_y, col_mask
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -995,6 +1111,127 @@ def highpass_ch4_d18O(
             plt.legend(); plt.tight_layout(); plt.show()
 
     return df_filt_ch4, df_filt_d18O
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def lowpass_ch4_d18O(
+    df_ch4_interp,                 # ← already on common grid; cols: age, ch4
+    df_d18O_interp,                # ← same grid;        cols: age, d18O
+    *,
+    cutoff_period=10_000,          # retain variability slower than this [yr]
+    butter_order=4,
+    flip_sign=False,               # flip δ18O so “warm = high”
+    plot=True
+):
+    """
+    Low–pass the pre-interpolated CH4 and δ18O series (< cutoff_period).
+
+    Parameters
+    ----------
+    df_ch4_interp : pd.DataFrame
+        Columns ['age', 'ch4'] on a uniform age grid.
+    df_d18O_interp : pd.DataFrame
+        Columns ['age', 'd18O'] on the same grid as df_ch4_interp.
+    cutoff_period : float
+        Cutoff period in years; only variability slower than this is retained.
+    butter_order : int
+        Order of the Butterworth filter.
+    flip_sign : bool
+        If True, invert the sign of the d18O series before filtering.
+    plot : bool
+        If True, display before/after comparison plots.
+
+    Returns
+    -------
+    df_lp_ch4 : pd.DataFrame
+        Columns ['age', 'filt_ch4'] containing the low-passed CH4.
+    df_lp_d18O : pd.DataFrame
+        Columns ['age', 'filt_d18O'] containing the low-passed δ18O.
+    """
+
+    # 1. sanity check: same age grid
+    ages = df_ch4_interp["age"].values
+    if not np.allclose(ages, df_d18O_interp["age"].values):
+        raise ValueError("df_ch4_interp and df_d18O_interp must share the same age vector")
+
+    ch4_vals  = df_ch4_interp["ch4"].values
+    d18o_vals = df_d18O_interp["d18O"].values
+    if flip_sign:
+        d18o_vals = -d18o_vals
+
+    # 2. Butterworth low-pass
+    dt = np.median(np.diff(ages))     # sampling interval [yr]
+    fs = 1.0 / dt                      # sampling frequency [1/yr]
+    fc = 1.0 / cutoff_period           # cutoff frequency [1/yr]
+    Wn = fc / (0.5 * fs)               # normalised cutoff (Nyquist=0.5*fs)
+
+    b, a = butter(butter_order, Wn, btype="lowpass")
+    filt_ch4  = filtfilt(b, a, ch4_vals)
+    filt_d18o = filtfilt(b, a, d18o_vals)
+
+    # 3. wrap into DataFrames
+    df_lp_ch4   = pd.DataFrame({"age": ages, "filt_ch4": filt_ch4})
+    df_lp_d18O  = pd.DataFrame({"age": ages, "filt_d18O": filt_d18o})
+
+    # 4. optional quick plot
+    if plot:
+        for name, orig, filt in [
+            ("CH4",  ch4_vals,  filt_ch4),
+            ("δ18O", d18o_vals, filt_d18o)
+        ]:
+            plt.figure(figsize=(10, 3))
+            plt.plot(ages, orig, alpha=0.4, label=f"{name} (raw)")
+            plt.plot(ages, filt, lw=1.8,
+                     label=f"{name} (< 1/{cutoff_period/1_000:.0f} ka)")
+            plt.gca().invert_xaxis()
+            plt.xlabel("Age (yr BP)")
+            plt.ylabel(name)
+            plt.legend()
+            plt.tight_layout()
+            plt.show()
+
+    return df_lp_ch4, df_lp_d18O
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -2315,7 +2552,7 @@ def transfer_entropy_surrogate_test(
     # Determine unidirectional significance
     sig_xy = p_xy < p
     sig_yx = p_yx < p
-    return sig_xy and not sig_yx, fig
+    return sig_xy and not sig_yx, fig, te_xy
 
 
 
@@ -2715,6 +2952,9 @@ def age_gap_interactive(
     quantile_95 = df['diff_age'].quantile(0.95)
     print(f"95% quantile of Δage: {quantile_95:.0f} years")
 
+    median_gap = df['diff_age'].median()
+    print(f"Median Δage: {median_gap:.0f} years")
+
     # Interactive plot
     fig = px.line(
         df,
@@ -2747,6 +2987,86 @@ def age_gap_interactive(
 
     return fig
 
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+
+def age_gap_hist(
+    df_ch4: pd.DataFrame,
+    age_min: int = 0,
+    age_max: int = 640_000,
+    nbins: int = 50
+) -> go.Figure:
+    """
+    Computes the methane sampling age step (Δage) within a given age window
+    and plots its distribution as an interactive histogram.
+
+    Parameters
+    ----------
+    df_ch4 : pd.DataFrame
+        DataFrame containing at least an 'age' column (years BP).
+    age_min : int, optional
+        Minimum age (yr BP) to include in the analysis. Default is 0.
+    age_max : int, optional
+        Maximum age (yr BP) to include in the analysis. Default is 640,000.
+    nbins : int, optional
+        Number of bins for the histogram. Default is 50.
+
+    Returns
+    -------
+    fig : plotly.graph_objects.Figure
+        Interactive Plotly figure of the Δage histogram.
+
+    Raises
+    ------
+    ValueError
+        If the data does not span the requested age range or has fewer than 2 points
+        in the selected window.
+    """
+    # Ensure sorted by age
+    df = df_ch4.sort_values('age').reset_index(drop=True)
+
+    # Validate that coverage covers the window
+    if df['age'].min() > age_min or df['age'].max() < age_max:
+        raise ValueError(
+            f"Data span {df['age'].min():g}-{df['age'].max():g} yr BP; "
+            f"requested window {age_min}-{age_max} yr BP is outside that range."
+        )
+
+    # Crop to the requested window
+    df_window = df.query('age >= @age_min and age <= @age_max').reset_index(drop=True)
+    if len(df_window) < 2:
+        raise ValueError("Not enough data points in the selected age window.")
+
+    # Compute Δage
+    df_window['diff_age'] = df_window['age'].diff().abs()
+    df_window = df_window.dropna(subset=['diff_age'])
+
+    # Print summary statistics
+    max_gap = df_window['diff_age'].max()
+    q95 = df_window['diff_age'].quantile(0.95)
+    median_gap = df_window['diff_age'].median()
+    print(f"Maximum Δage within {age_min}-{age_max} yr BP: {max_gap:.0f} years")
+    print(f"95% quantile of Δage: {q95:.0f} years")
+    print(f"Median Δage: {median_gap:.0f} years")
+
+    # Build the interactive histogram
+    fig = px.histogram(
+        df_window,
+        x='diff_age',
+        nbins=nbins,
+        labels={'diff_age': 'Δage (yr)'},
+        title=f'Distribution of Δage ({len(df_window)} samples)'
+    )
+
+    fig.update_layout(
+        xaxis_title='Δage (yr)',
+        yaxis_title='Count',
+        bargap=0.1,
+        title=dict(x=0.5)
+    )
+
+    return fig
 
 
 
