@@ -15,6 +15,29 @@ from joblib import Parallel, delayed
 
 
 
+def interpolate_df(df, interval):
+    # Get column names
+    time_col = df.columns[0]
+    value_col = df.columns[1]
+    
+    # Create new regular time grid
+    time_min = df[time_col].min()
+    time_max = df[time_col].max()
+    new_time = np.arange(time_min, time_max + interval, interval)
+    
+    # Interpolate values onto new time grid
+    new_values = np.interp(new_time, df[time_col], df[value_col])
+    
+    # # Create new dataframe
+    # df_interp = pd.DataFrame({
+    #     time_col: new_time,
+    #     value_col: new_values
+    # })
+    # return df_interp, using the same column names as the original dataframe
+    df_interp = pd.DataFrame({time_col: new_time, value_col: new_values})
+    
+    return df_interp
+
 
 
 
@@ -1270,13 +1293,14 @@ def mc_TE_heatmap(
         local_counts = np.zeros((len(ks), len(gbins)), dtype=int)
         for i, k in enumerate(ks):
             for j, b in enumerate(gbins):
-                sig, _ = transfer_entropy_surrogate_test(
+                sig, fig,te = transfer_entropy_surrogate_test(
                     pre, sq,
                     k=k,
                     forcing_bins=b,
                     n_surr=n_surr,
                     p=alpha,
-                    if_plot=False
+                    if_plot=False,
+                    sq_method='quantile' 
                 )
                 local_counts[i, j] = int(sig)
         return local_counts
