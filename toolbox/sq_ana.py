@@ -3174,17 +3174,20 @@ def te_vs_dt_scan(
                 y, np.histogram_bin_edges(y, sq_bins)) - 1)
 
         # --------------- empirical TE ---------------------------------
-        te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
-        te_yx = transfer_entropy(y_disc[:-1], x_disc[1:], k=k)
+        # te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
+        # te_yx = transfer_entropy(y_disc[:-1], x_disc[1:], k=k)
+        te_xy = transfer_entropy(x_disc, y_disc, k=k)
+        te_yx = transfer_entropy(y_disc, x_disc, k=k)
 
         # --------------- surrogate test -------------------------------
         null_xy = np.empty(n_surr)
         null_yx = np.empty(n_surr)
         for i in range(n_surr):
             null_xy[i] = transfer_entropy(
-                np.random.permutation(x_disc)[:-1], y_disc[1:], k=k)
+                # np.random.permutation(x_disc)[:-1], y_disc[1:], k=k)
+                np.random.permutation(x_disc), y_disc, k=k)
             null_yx[i] = transfer_entropy(
-                np.random.permutation(y_disc)[:-1], x_disc[1:], k=k)
+                np.random.permutation(y_disc), x_disc, k=k)
 
         p_xy = (null_xy >= te_xy).sum() / n_surr
         p_yx = (null_yx >= te_yx).sum() / n_surr
