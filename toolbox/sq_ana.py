@@ -2488,17 +2488,21 @@ def transfer_entropy_surrogate_test(
 
     
     # Empirical TE (one-step, history k)
-    te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
-    te_yx = transfer_entropy(y_disc[:-1], x_disc[1:], k=k)
+    # te_xy = transfer_entropy(x_disc[:-1], y_disc[1:], k=k)
+    # te_yx = transfer_entropy(y_disc[:-1], x_disc[1:], k=k)
+    te_xy = transfer_entropy(x_disc, y_disc, k=k)
+    te_yx = transfer_entropy(y_disc, x_disc, k=k)
     
     # Surrogate nulls
     null_xy = np.zeros(n_surr)
     null_yx = np.zeros(n_surr)
     for i in range(n_surr):
         xs = np.random.permutation(x_disc)
-        null_xy[i] = transfer_entropy(xs[:-1], y_disc[1:], k=k)
+        # null_xy[i] = transfer_entropy(xs[:-1], y_disc[1:], k=k)
+        null_xy[i] = transfer_entropy(xs, y_disc, k=k)
         ys = np.random.permutation(y_disc)
-        null_yx[i] = transfer_entropy(ys[:-1], x_disc[1:], k=k)
+        # null_yx[i] = transfer_entropy(ys[:-1], x_disc[1:], k=k)
+        null_yx[i] = transfer_entropy(ys, x_disc, k=k)
     
     # p-values
     p_xy = (np.sum(null_xy >= te_xy) + 1) / (n_surr + 1)
