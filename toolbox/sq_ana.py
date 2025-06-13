@@ -3245,7 +3245,7 @@ def te_vs_dt_scan(
     ax.set_xscale('log')
     ax.set_xlabel('Resampling interval Δt (yr)')
     ax.set_ylabel('Transfer Entropy (bits)')
-    ax.set_title(f'Scale-dependence of TE  ({forcing} → sq)')
+    ax.set_title(f'Scale-dependence of TE  ({forcing} → sq), age_min={df_sq_raw["age"].min():g}, age_max={df_sq_raw["age"].max():g}')
     ax.grid(True, which='both', alpha=0.3)
     ax.xaxis.set_major_formatter(mticker.FormatStrFormatter('%g'))
     ax.legend(frameon=True, fontsize=8)
