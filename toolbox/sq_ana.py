@@ -490,8 +490,9 @@ def freq_resolved_te(
         ax[1].set_xlabel('time (ka BP)')
         plt.colorbar(im1, ax=ax[1], fraction=.046)
 
+        # np.quantile(te_mat,0.5)
         im2 = ax[2].imshow(te_mat, origin='upper', aspect='auto',
-                        cmap=cmap, extent=extent_te, vmin=np.quantile(te_mat,0.5), vmax=te_mat.max())
+                        cmap=cmap, extent=extent_te, vmin=te_mat.min() , vmax=te_mat.max())
         ax[2].set_title('TE  (source phases → target phases)')
         ax[2].set_xlabel(f'{target_vname} period (kyr)')
         ax[2].set_ylabel(f'{source_vname} period (kyr)')
@@ -2364,6 +2365,475 @@ def local_TE(
     plt.show()
 
     return local_te
+
+
+
+
+
+
+
+
+
+
+
+
+
+def local_TE_prob(
+    df_pre,
+    df_sq,
+    forcing_column='pre',
+    target_column='sq',
+    time_column='age',
+    nbins_pre=4,
+    smooth_win=200
+):
+    """
+    Like local_prob, but with an extra middle subplot showing local TE.
+    Returns: flip_prob, stay_prob, local_te
+    """
+    # 1) raw series (reverse → old→young if needed)
+    pre_raw = df_pre[forcing_column].values[::-1]
+    sq_raw  = df_sq[target_column].values[::-1]
+    t       = df_pre[time_column].values[::-1]
+
+    # 2) mark "low-pre" periods (below median)
+    q50   = np.quantile(pre_raw, 0.5)
+    low   = pre_raw < q50
+    edges = np.diff(low.astype(int))
+    starts = list(np.where(edges == 1)[0] + 1)
+    ends   = list(np.where(edges == -1)[0] + 1)
+    if low[0]:  starts.insert(0, 0)
+    if low[-1]: ends.append(len(low))
+    low_periods = list(zip(starts, ends))
+
+    # 3) discretise
+    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+    pre_disc = np.digitize(pre_raw, bins_pre) - 1
+    pre_disc = np.clip(pre_disc, 0, nbins_pre-1)
+    sq_disc  = (sq_raw > 0).astype(int)
+
+    # 4) compute flip/stay probabilities
+    x_idx = pre_disc[:-1]
+    y_idx = sq_disc[:-1]
+    z_idx = sq_disc[1:]
+    counts = np.zeros((nbins_pre, 2, 2), dtype=int)
+    for xi, yi, zi in zip(x_idx, y_idx, z_idx):
+        counts[xi, yi, zi] += 1
+    with np.errstate(divide='ignore', invalid='ignore'):
+        totals = counts.sum(axis=2, keepdims=True)
+        cond_prob = np.divide(counts, totals, where=totals>0)
+    flip_raw = np.array([cond_prob[x, y, 1-y] for x, y in zip(x_idx, y_idx)])
+    stay_raw = np.array([cond_prob[x, y,   y ] for x, y in zip(x_idx, y_idx)])
+    # simple centred moving average
+    def smooth(arr, win=smooth_win, mode='edge'):
+        L = len(arr)
+        left = win//2
+        right = win - left - 1
+        arr_p = np.pad(arr, (left, right), mode=mode)
+        kern  = np.ones(win)/win
+        return np.convolve(arr_p, kern, mode='valid')
+    flip_prob = smooth(flip_raw)
+    stay_prob = smooth(stay_raw)
+
+    # 5) compute local TE
+    # note: TE is defined on pairs, so its length is len(pre_disc)-1 == len(t)-1
+    local_te  = transfer_entropy(pre_disc, sq_disc, k=1, local=True)
+
+    # -------- PLOT all three panels --------
+    fig = plt.figure(figsize=(12, 6))
+    gs  = fig.add_gridspec(3, 1,
+                           height_ratios=[0.8, 0.8, 1.6],
+                           hspace=0)
+
+    # Top: raw signals
+    ax0 = fig.add_subplot(gs[0])
+    ax0.plot(t, pre_raw, label=f'{forcing_column} (raw)')
+    ax0.set_ylabel(forcing_column)
+    ax0b = ax0.twinx()
+    ax0b.plot(t, sq_raw, color='C1', label=f'{target_column} (raw)')
+    ax0b.set_ylabel(target_column)
+    for s, e in low_periods:
+        ax0.axvspan(t[s], t[e-1], color='gray', alpha=0.3)
+        ax0b.axvspan(t[s], t[e-1], color='gray', alpha=0.3)
+    lns = ax0.get_lines() + ax0b.get_lines()
+    ax0.legend(lns, [l.get_label() for l in lns], loc='upper right')
+    ax0.tick_params(axis='x', labelbottom=False)
+    ax0.set_xlim(t[1], t[-1])
+
+    # Middle: local TE
+    ax1 = fig.add_subplot(gs[1], sharex=ax0)
+    ax1.plot(t[1:], local_te.T, color='C2', label='Local TE')
+    ax1.set_ylabel('Local TE (bits)')
+    ax1.legend(loc='upper right')
+    ax1.tick_params(axis='x', labelbottom=False)
+    for s, e in low_periods:
+        ax1.axvspan(t[s], t[e-1], color='gray', alpha=0.3)
+
+    # Bottom: flip/stay probabilities
+    ax2 = fig.add_subplot(gs[2], sharex=ax0)
+    ln1, = ax2.plot(t[1:], flip_prob, color='C3', label='P(flip)')
+    ax2.set_ylabel('P(flip)', color='C3')
+    ax2.tick_params(axis='y', colors='C3')
+    ax2b = ax2.twinx()
+    ln2, = ax2b.plot(t[1:], stay_prob, color='steelblue', label='P(stay)')
+    ax2b.set_ylabel('P(stay)', color='C4')
+    ax2b.tick_params(axis='y', colors='C4')
+    ax2.set_xlabel(time_column)
+    for s, e in low_periods:
+        ax2.axvspan(t[s], t[e-1], color='gray', alpha=0.3)
+        ax2b.axvspan(t[s], t[e-1], color='gray', alpha=0.3)
+    ax2.legend([ln1, ln2], ['P(flip)', 'P(stay)'], loc='upper right')
+
+    plt.show()
+
+    return flip_prob, stay_prob, local_te
+
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
+def predict_events_future(df_pre,          # original training dataframe
+                          flip_prob,       # smoothed P(flip) from training
+                          df_pre_future,   # new dataframe with 'age' & 'pre'
+                          window=20_000,   # yrs
+                          forcing_column='pre',
+                          time_column='age',
+                          nbins_pre=4,
+                          band_sigma=1.0,  # size of uncertainty band (σ, 1 = ~68 %)
+                          cmap_name='tab20c'):
+    """
+    Predict the expected number of flip events – and an uncertainty range – for a
+    future precession series sampled at the same Δt as the training data.
+
+    Returns
+    -------
+    events_mean  : np.ndarray  – expected # events / `window`
+    events_lower : np.ndarray  – mean - σ
+    events_upper : np.ndarray  – mean + σ
+    """
+
+    # ────────── 1) learn mean & σ of P(flip) in each pre-bin ────────────
+    t_train   = df_pre[time_column].values[::-1]
+    pre_train = df_pre[forcing_column].values[::-1]
+
+    bins_pre = np.histogram_bin_edges(pre_train, bins=nbins_pre)
+    pre_disc_train = np.clip(np.digitize(pre_train, bins_pre) - 1, 0, nbins_pre-1)
+
+    # statistics per bin
+    means = np.full(nbins_pre, np.nan)
+    stdev = np.full(nbins_pre, np.nan)
+    for b in range(nbins_pre):
+        fp_bin = flip_prob[pre_disc_train[1:] == b]      # align flip_prob with t[1:]
+        if len(fp_bin):
+            means[b] = fp_bin.mean()
+            stdev[b] = fp_bin.std(ddof=1)
+    # fallback: if a bin had no training points, use global stats
+    global_mean = flip_prob.mean()
+    global_std  = flip_prob.std(ddof=1)
+    means = np.where(np.isnan(means), global_mean, means)
+    stdev = np.where(np.isnan(stdev), global_std, stdev)
+
+    # ────────── 2) convert future pre → expected events ± σ ─────────────
+    # t_future   = df_pre_future[time_column].values[::-1]
+    # pre_future = df_pre_future[forcing_column].values[::-1]
+    t_future   = df_pre_future[time_column].values
+    pre_future = df_pre_future[forcing_column].values
+
+    dt_future  = float(np.abs(np.median(np.diff(t_future))))  # yrs / step
+    pre_disc_future = np.clip(np.digitize(pre_future, bins_pre) - 1, 0, nbins_pre-1)
+
+    p_mean = means[pre_disc_future]
+    p_std  = stdev[pre_disc_future]
+
+    events_mean  =  window * p_mean / dt_future
+    events_lower =  window * (p_mean - band_sigma * p_std) / dt_future
+    events_upper =  window * (p_mean + band_sigma * p_std) / dt_future
+
+    # guard against negative lower bound
+    events_lower = np.clip(events_lower, 0, None)
+
+    # ────────── 3) PLOT ────────────────────────────────────────────────
+    fig = plt.figure(figsize=(12, 5))
+    gs  = fig.add_gridspec(2, 1, height_ratios=[0.9, 1.3], hspace=0)
+
+    # (a) top – future pre with coloured bands
+    ax0 = fig.add_subplot(gs[0])
+    cmap = cm.get_cmap(cmap_name, nbins_pre)
+    for i in range(nbins_pre):
+        ax0.axhspan(bins_pre[i], bins_pre[i+1],
+                    facecolor=cmap(i), alpha=0.25)
+        ax0.axhline(bins_pre[i], color='white', lw=0.8)
+    ax0.plot(t_future, pre_future, color='black', lw=1.4)
+    ax0.set_ylabel(forcing_column)
+    ax0.set_xlim(t_future[0], t_future[-1])
+    ax0.tick_params(axis='x', labelbottom=False)
+
+    # (b) bottom – expected events with ±σ band
+    ax1 = fig.add_subplot(gs[1], sharex=ax0)
+    ax1.plot(t_future, events_mean, color='C3', label='Mean prediction')
+    ax1.fill_between(t_future, events_lower, events_upper,
+                     color='C3', alpha=0.3,
+                     label=f'±{band_sigma:.0f} σ')
+    ax1.set_xlabel(time_column)
+    ax1.set_ylabel('Events / window')
+    ax1.legend(loc='upper right')
+
+    plt.show()
+    return events_mean, events_lower, events_upper
+
+
+
+
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from matplotlib import cm                            # colormap for the strips
+
+# def flip_events(df_pre,
+#         flip_prob,
+#         window=20_000,              # yrs; make this whatever you like
+#         forcing_column='pre',
+#         time_column='age',
+#         nbins_pre=4):
+#     """
+#     Convert P(flip) → expected number of flip events in a `window`-yr cycle.
+
+#     Parameters
+#     ----------
+#     df_pre       : pandas.DataFrame  – must contain `forcing_column`, `time_column`
+#     flip_prob    : 1-D array (len = len(df_pre)-1)  – smoothed P(flip) from local_TE_prob
+#                    *must correspond to t[1:], i.e. skip the very first sample*
+#     window       : float  – cycle length in the same units as the time axis (yrs)
+#     forcing_column, time_column, nbins_pre : see previous functions
+
+#     Returns
+#     -------
+#     events : 1-D numpy array  – expected number of flips per `window`
+#              (same length as `flip_prob`, aligned with t[1:])
+#     """
+#     # --- 1) time axis and resolution -----------------------------------------
+#     t  = df_pre[time_column].values[::-1]            # ascending old→young
+#     dt = float(np.abs(np.median(np.diff(t))))        # median spacing (yrs)
+
+#     # --- 2) expected number of flips in the chosen window --------------------
+#     events = (window * flip_prob) / dt               # Eq.:  N = W * p / dt
+
+#     # --- 3) discretise pre for the coloured strips ---------------------------
+#     pre_raw = df_pre[forcing_column].values[::-1]
+#     bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+#     pre_disc = np.clip(np.digitize(pre_raw, bins_pre) - 1, 0, nbins_pre-1)
+#     strip_vals = pre_disc[1:]                       # align with events length
+
+#     # --- 4) figure -----------------------------------------------------------
+#     fig = plt.figure(figsize=(12, 5))
+#     gs  = fig.add_gridspec(2, 1, height_ratios=[0.9, 1.3], hspace=0)
+
+#     # (a) top panel ─ raw forcing signal
+#     ax0 = fig.add_subplot(gs[0])
+#     ax0.plot(t, pre_raw, color='C0')
+#     ax0.set_ylabel(forcing_column)
+#     ax0.set_xlim(t[1], t[-1])
+#     ax0.tick_params(axis='x', labelbottom=False)
+
+#     # (b) bottom panel ─ expected number of events
+#     ax1 = fig.add_subplot(gs[1], sharex=ax0)
+#     ax1.plot(t[1:], events, color='C3', label=f'Expected # flips / {window:,} yr')
+#     ax1.set_xlabel(time_column)
+#     ax1.set_ylabel('Events (count)')
+
+#     # Determine a thin band above the data range for the coloured strips
+#     y_min, y_max = ax1.get_ylim()
+#     strip_h = 0.06 * (y_max - y_min + 1e-9)
+#     ax1.imshow(strip_vals.reshape(1, -1),
+#                extent=[t[1], t[-1], y_max, y_max + strip_h],
+#                aspect='auto',
+#                cmap=cm.viridis, interpolation='nearest')
+#     ax1.set_ylim(y_min, y_max + strip_h)
+#     ax1.text(0.005, 0.98, f'{nbins_pre} pre-bins',
+#              transform=ax1.transAxes, fontsize='x-small', va='top', ha='left')
+
+#     ax1.legend(loc='upper right')
+#     plt.show()
+
+#     return events
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
+def flip_events(df_pre,
+                flip_prob,
+                window=20_000,              # yrs; change at will
+                forcing_column='pre',
+                time_column='age',
+                nbins_pre=4):
+    """
+    Convert P(flip) → expected number of flip events in a `window`-yr cycle
+    and plot:
+        • top  : pre signal with horizontal bin strips
+        • lower: expected # flip events / window
+    Returns
+    -------
+    events : 1-D numpy array, length == len(flip_prob)
+    """
+    # ------------------------------------------------------------------ data
+    t  = df_pre[time_column].values[::-1]                 # old → young
+    dt = float(np.abs(np.median(np.diff(t))))             # median spacing
+
+    events = (window * flip_prob) / dt                    # N = W * p / dt
+
+    pre_raw  = df_pre[forcing_column].values[::-1]
+    bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+
+    # ----------------------------------------------------------- figure setup
+    fig = plt.figure(figsize=(12, 5))
+    gs  = fig.add_gridspec(2, 1, height_ratios=[0.9, 1.3], hspace=0)
+
+    # ── (a) top: pre, with horizontal bands for bins ────────────────────────
+    ax0 = fig.add_subplot(gs[0])
+
+    # draw horizontal colour bands (z-order 0 → behind everything)
+    cmap = cm.get_cmap('spring', nbins_pre)
+    for i in range(nbins_pre):
+        y0, y1 = bins_pre[i], bins_pre[i + 1]
+        ax0.axhspan(y0, y1,
+                    facecolor=cmap(i),
+                    alpha=0.5,
+                    zorder=0,
+                    edgecolor='none')
+
+    # pre line
+    ax0.plot(t, pre_raw, color='C0', zorder=2)
+    ax0.set_ylabel(forcing_column)
+    ax0.set_xlim(t[1], t[-1])
+    ax0.tick_params(axis='x', labelbottom=False)
+
+    # optional: indicate bin edges on y-axis ticks
+    ax0.set_yticks(bins_pre)
+    ax0.set_yticklabels([f'{b:.2g}' for b in bins_pre])
+
+    # ── (b) bottom: expected events ─────────────────────────────────────────
+    ax1 = fig.add_subplot(gs[1], sharex=ax0)
+    ax1.plot(t[1:], events,
+             color='C3',
+             label=f'Expected # flips / {window:,} yr')
+    ax1.set_xlabel(time_column)
+    ax1.set_ylabel('Events (count)')
+    ax1.legend(loc='upper right')
+
+    plt.show()
+    return events
+
+
+
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from matplotlib import cm, colors
+
+# def flip_events(df_pre,
+#                 flip_prob,
+#                 window=20_000,            # yrs
+#                 forcing_column='pre',
+#                 time_column='age',
+#                 nbins_pre=4,
+#                 band_alpha=0.25,          # transparency of the colour bands
+#                 show_bin_labels=False):   # annotate 0,1,2… in each band
+#     """
+#     Expected # flip events per `window`, with an improved background
+#     showing pre-bins as horizontal colour bands.
+
+#     Returns
+#     -------
+#     events : 1-D numpy array, same length as `flip_prob`.
+#     """
+#     # ─────────────────────────── data prep ────────────────────────────────
+#     t  = df_pre[time_column].values[::-1]                # old → young
+#     dt = float(np.abs(np.median(np.diff(t))))            # median Δt
+
+#     events = (window * flip_prob) / dt                   # N = W * p / dt
+
+#     pre_raw  = df_pre[forcing_column].values[::-1]
+#     bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+
+#     # ─────────────────────────── figure ───────────────────────────────────
+#     fig = plt.figure(figsize=(12, 5))
+#     gs  = fig.add_gridspec(2, 1, height_ratios=[0.9, 1.3], hspace=0)
+
+#     # ── top panel: pre with colour bands ──────────────────────────────────
+#     ax0 = fig.add_subplot(gs[0])
+
+#     # choose a qualitative colormap with clearly separated hues
+#     cmap = cm.get_cmap('tab20c', nbins_pre)
+
+#     # draw coloured horizontal bands
+#     for i in range(nbins_pre):
+#         y0, y1 = bins_pre[i], bins_pre[i + 1]
+#         ax0.axhspan(y0, y1,
+#                     facecolor=cmap(i),
+#                     alpha=band_alpha,
+#                     zorder=0)
+
+#     # draw thin boundary lines to emphasise separation
+#     for y in bins_pre:
+#         ax0.axhline(y, color='white', lw=0.8, zorder=1)
+
+#     # pre signal on top
+#     ax0.plot(t, pre_raw, color='black', lw=1.4, zorder=2)
+#     ax0.set_ylabel(forcing_column)
+#     ax0.set_xlim(t[1], t[-1])
+#     ax0.tick_params(axis='x', labelbottom=False)
+
+#     # optional: label each band with its bin index
+#     if show_bin_labels:
+#         for i in range(nbins_pre):
+#             y0, y1 = bins_pre[i], bins_pre[i + 1]
+#             ax0.text(0.98, (y0 + y1) / 2, str(i),
+#                      transform=ax0.get_yaxis_transform(),
+#                      ha='right', va='center',
+#                      fontsize='x-small',
+#                      color='white', alpha=0.9,
+#                      zorder=3)
+
+#     # ── bottom panel: expected events ─────────────────────────────────────
+#     ax1 = fig.add_subplot(gs[1], sharex=ax0)
+#     ax1.plot(t[1:], events,
+#              color='C3',
+#              label=f'Expected # flips / {window:,} yr')
+#     ax1.set_xlabel(time_column)
+#     ax1.set_ylabel('Events (count)')
+#     ax1.legend(loc='upper right')
+
+#     plt.show()
+#     return events
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
