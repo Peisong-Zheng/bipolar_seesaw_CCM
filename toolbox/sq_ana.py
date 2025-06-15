@@ -2673,7 +2673,8 @@ def flip_events(df_pre,
                 window=20_000,              # yrs; change at will
                 forcing_column='pre',
                 time_column='age',
-                nbins_pre=4):
+                nbins_pre=4,
+                cmap_name='spring'):
     """
     Convert P(flip) → expected number of flip events in a `window`-yr cycle
     and plot:
@@ -2700,7 +2701,7 @@ def flip_events(df_pre,
     ax0 = fig.add_subplot(gs[0])
 
     # draw horizontal colour bands (z-order 0 → behind everything)
-    cmap = cm.get_cmap('spring', nbins_pre)
+    cmap = cm.get_cmap(cmap_name, nbins_pre)
     for i in range(nbins_pre):
         y0, y1 = bins_pre[i], bins_pre[i + 1]
         ax0.axhspan(y0, y1,
@@ -2708,6 +2709,7 @@ def flip_events(df_pre,
                     alpha=0.5,
                     zorder=0,
                     edgecolor='none')
+        ax0.axhline(bins_pre[i], color='white', lw=0.8)
 
     # pre line
     ax0.plot(t, pre_raw, color='C0', zorder=2)
