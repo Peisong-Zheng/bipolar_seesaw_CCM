@@ -1276,6 +1276,7 @@ def mc_TE_heatmap(
     alpha=0.05,
     ks=None,
     gbins=None,
+    sq_method='hist',  # 'hist' or 'phase'
     p_thresh=0.9,
     n_jobs=-1,
     if_plot=False,
@@ -1301,7 +1302,7 @@ def mc_TE_heatmap(
                     n_surr=n_surr,
                     p=alpha,
                     if_plot=False,
-                    sq_method='quantile' 
+                    sq_method=sq_method 
                 )
                 local_counts[i, j] = int(sig)
         return local_counts
