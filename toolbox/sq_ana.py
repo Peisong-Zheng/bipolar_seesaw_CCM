@@ -3363,8 +3363,8 @@ def transfer_entropy_surrogate_test(
 
     # Discretize sq series
     if sq_method == 'quantile':
-        # xbins = np.quantile(x, np.linspace(0, 1, forcing_bins + 1))
-        ybins = np.quantile(y, np.linspace(0, 1, sq_bins + 1))
+        # xbins = np.quantile(x, np.linspace(0, 1, forcing_bins+1))
+        ybins = np.quantile(y, np.linspace(0, 1, sq_bins+1))
         y_disc = np.digitize(y, ybins) - 1
     elif sq_method == 'hist':
         # xbins = np.histogram_bin_edges(x, bins=forcing_bins)
@@ -3457,6 +3457,481 @@ def transfer_entropy_surrogate_test(
     sig_xy = p_xy < p
     sig_yx = p_yx < p
     return sig_xy and not sig_yx, fig, te_xy
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ------------------------------------------------------------------
+# Helper: shift two arrays by an integer number of samples
+# ------------------------------------------------------------------
+def _shift_pair(driver, target, lag_steps):
+    if lag_steps > 0:          # driver leads
+        return driver[:-lag_steps], target[lag_steps:]
+    elif lag_steps < 0:        # driver lags
+        return driver[-lag_steps:], target[:lag_steps]
+    else:                      # no shift
+        return driver, target
+
+
+# ------------------------------------------------------------------
+# Compute TE(driver→target) across a vector of lags
+# ------------------------------------------------------------------
+def _te_vs_lag(driver_series, target_series, lags, step, **te_kwargs):
+    lag_steps = (np.asarray(lags) / step).astype(int)
+    te_vals, sig = [], []
+
+    for s in lag_steps:
+        x, y = _shift_pair(driver_series, target_series, s)
+
+        if len(x) < 20:            # avoid very short overlap
+            te_vals.append(np.nan)
+            sig.append(False)
+            continue
+
+        is_sig, _, te_xy = sa.transfer_entropy_surrogate_test(
+            x, y, if_plot=False, **te_kwargs
+        )
+        te_vals.append(te_xy)
+        sig.append(is_sig)
+
+    return np.array(te_vals), np.array(sig)
+
+
+# ------------------------------------------------------------------
+# PUBLIC FUNCTION ---------------------------------------------------
+def run_lag_te(
+    pre, obl, sq,
+    STEP      = 200,       # sampling interval in *years*
+    max_lag   = 2000,      # ± window (years)
+    plot      = True,
+    **te_kw                    # forwarded to transfer_entropy_surrogate_test
+):
+    """
+    Sweep lead/lag for Precession and Obliquity drivers and (optionally) plot.
+    Parameters
+    ----------
+    pre, obl : 1-D numpy arrays
+        Orbital driver series (already resampled to STEP).
+    sq       : 1-D numpy array
+        Target MCV series.
+    STEP     : int
+        Sampling interval in years.
+    max_lag  : int
+        Maximum absolute lag to test (years).
+    plot     : bool
+        Produce the two-panel matplotlib figure?
+    te_kw    : keyword args passed straight to `sa.transfer_entropy_surrogate_test`.
+    Returns
+    -------
+    results : dict
+        {'Precession': {'lags': ..., 'te': ..., 'sig': ...},
+         'Obliquity' : {...}}
+    fig : matplotlib Figure or None
+    """
+    # ---------------- lag grid -------------------------------------
+    lags = np.arange(-max_lag, max_lag + STEP, STEP)
+
+    # ---------------- compute TE curves ----------------------------
+    te_pre, sig_pre = _te_vs_lag(pre, sq, lags, STEP, **te_kw)
+    te_obl, sig_obl = _te_vs_lag(obl, sq, lags, STEP, **te_kw)
+
+    results = {
+        'Precession': {'lags': lags, 'te': te_pre, 'sig': sig_pre},
+        'Obliquity' : {'lags': lags, 'te': te_obl, 'sig': sig_obl},
+    }
+
+    # ---------------- plotting -------------------------------------
+    fig = None
+    if plot:
+        fig, axes = plt.subplots(nrows=2, sharex=True, figsize=(4, 6))
+
+        # --- panel 1: Precession -----------------------------------
+        ax = axes[0]
+        ax.plot(lags, te_pre, lw=2, color='C0')
+        ax.scatter(lags[sig_pre], te_pre[sig_pre],
+                   s=55, marker='o', facecolor='C0',
+                   edgecolor='k', zorder=3, label='p < α')
+        ax.axvline(0, color='k', lw=0.8, ls='--')
+        ax.set_title('Precession → MCV')
+        ax.set_ylabel('TE (bits)')
+        ax.legend(loc='upper right', frameon=True)
+
+        # --- panel 2: Obliquity ------------------------------------
+        ax = axes[1]
+        ax.plot(lags, te_obl, lw=2, color='C1')
+        ax.scatter(lags[sig_obl], te_obl[sig_obl],
+                   s=55, marker='s', facecolor='C1',
+                   edgecolor='k', zorder=3, label='p < α')
+        ax.axvline(0, color='k', lw=0.8, ls='--')
+        ax.set_title('Obliquity → MCV')
+        ax.set_xlabel('Lead / lag (years)\n(positive = driver leads target)')
+        ax.set_ylabel('TE (bits)')
+        ax.legend(loc='upper right', frameon=True)
+
+        # tidy up axes
+        for ax in axes:
+            ax.set_xlim(lags.min(), lags.max())
+            ax.spines[['top', 'right']].set_visible(False)
+
+        # NOTE: tight_layout() intentionally omitted (user request)
+
+    return results, fig
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.spatial import cKDTree            
+from matplotlib import colormaps
+
+
+# ───────────────────────── helper: delay-coordinate embedding ──────────────
+def _embed(series, E=3, tau=1):
+    """Return (matrix, valid_indices)."""
+    series = np.asarray(series)
+    N = len(series)
+    idx = np.arange((E-1)*tau, N)               # times with full history
+    mat = np.column_stack([series[idx - j*tau] for j in range(E)])
+    return mat, idx
+
+
+# ───────────────────────────── main CCM-style predictor ────────────────────
+def predict_events_future_ccm(df_pre_train,       # historical pre
+                              events_train,       # historical events / window
+                              df_pre_future,      # future pre
+                              window=20_000,      # yr, just meta for label
+                              E=3, tau=1, k=None,
+                              band_sigma=1.0,     # width of uncertainty band
+                              forcing_column='pre',
+                              time_column='age',
+                              cmap_name='tab20c'):
+    """
+    Forecast future event counts using a simplex/CCM-style nearest-neighbour
+    mapping in precession state-space.
+
+    Returns: (mean, lower, upper) as NumPy arrays aligned to df_pre_future.
+    """
+    # -------- 0) housekeeping ------------------------------------------------
+    if k is None:
+        k = E + 1                                # standard simplex choice
+
+    # -------- 1) embed training forcing -------------------------------------
+    pre_train = df_pre_train[forcing_column].values[::-1]
+    X_train, idx_train = _embed(pre_train, E, tau)
+
+    # align events to embedding indices
+    events_train = np.asarray(events_train)
+    events_train_emb = events_train[idx_train]   # same length as X_train
+
+    # build KD-tree for fast neighbour search
+    tree = cKDTree(X_train)
+
+    # -------- 2) embed future forcing ---------------------------------------
+    # pre_future = df_pre_future[forcing_column].values[::-1]
+    # t_future   = df_pre_future[time_column].values[::-1]
+
+    pre_future = df_pre_future[forcing_column].values
+    t_future   = df_pre_future[time_column].values
+
+    X_future, idx_future = _embed(pre_future, E, tau)
+
+    # -------- 3) nearest-neighbour predictions ------------------------------
+    dists, neigh_idx = tree.query(X_future, k=k)        # shape (M,k)
+    # distance of closest neighbour, avoid zero
+    d1 = dists[:, 0:1] + 1e-12
+
+    # weights: exp( −d / d1 )
+    w = np.exp(-dists / d1)
+
+    # weighted mean
+    neigh_events = events_train_emb[neigh_idx]          # shape (M,k)
+    events_mean = (w * neigh_events).sum(axis=1) / w.sum(axis=1)
+
+    # weighted variance
+    var = (w * (neigh_events - events_mean[:, None])**2).sum(axis=1) / w.sum(axis=1)
+    sigma = np.sqrt(var)
+
+    events_lower = np.clip(events_mean - band_sigma * sigma, 0, None)
+    events_upper = events_mean + band_sigma * sigma
+
+    # pad the first (E-1)*tau points with NaN so arrays align to df_pre_future
+    pad = np.full((pre_future.size,), np.nan)
+    pad[idx_future] = events_mean
+    events_mean = pad
+
+    pad = np.full_like(events_mean, np.nan)
+    pad[idx_future] = events_lower
+    events_lower = pad
+
+    pad = np.full_like(events_mean, np.nan)
+    pad[idx_future] = events_upper
+    events_upper = pad
+
+    # -------- 4) PLOT --------------------------------------------------------
+    from matplotlib import cm
+    nbins_pre = 6
+    bins_pre  = np.histogram_bin_edges(pre_train, bins=nbins_pre)
+
+    fig = plt.figure(figsize=(4, 5))
+    gs  = fig.add_gridspec(2, 1, height_ratios=[1, 3], hspace=0)
+
+    # (a) future pre with coloured bands
+    ax0 = fig.add_subplot(gs[0])
+    # cmap = colormaps[cmap_name] # cm.get_cmap(cmap_name, nbins_pre)
+    cmap = cm.get_cmap(cmap_name, nbins_pre)
+    for i in range(nbins_pre):
+        ax0.axhspan(bins_pre[i], bins_pre[i+1],
+                    facecolor=cmap(i), alpha=0.5)
+        ax0.axhline(bins_pre[i], color='white', lw=0.8)
+    ax0.plot(t_future, pre_future, color='black', lw=1.4)
+    ax0.set_ylabel(forcing_column)
+    ax0.set_xlim(t_future[0], t_future[-1])
+    ax0.tick_params(axis='x', labelbottom=False)
+
+    # (b) forecasted events
+    ax1 = fig.add_subplot(gs[1], sharex=ax0)
+    ax1.plot(t_future, events_mean, color='C3', label='Mean forecast')
+    # plot a horizontal line at median of events_train as the baseline
+    ax1.axhline(np.median(events_train), color='C0', linestyle='--',
+                label='Median historical events')
+    ax1.fill_between(t_future, events_lower, events_upper,
+                     color='C3', alpha=0.3,
+                     label=f'±{band_sigma:.0f} σ')
+    ax1.set_xlabel(time_column)
+    ax1.set_ylabel(f'Events / {window:,} yr, % of mean')
+    ax1.legend(loc='lower right')
+
+    plt.show()
+    return events_mean, events_lower, events_upper
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+from pyinform import transfer_entropy
+from sklearn.cluster import KMeans
+from numpy.fft import rfft, irfft
+
+# ─────────────────────────────────────────────────────────────
+# Helpers for spectrum-preserving surrogates
+# ─────────────────────────────────────────────────────────────
+def _phase_randomised(x):
+    """Single phase-randomised surrogate that preserves power spectrum."""
+    n = len(x)
+    # Real-FFT (one-sided)
+    Xf = rfft(x)
+    # Random phases for positive-freq coefficients except DC & Nyquist
+    random_ph = np.exp(1j * 2 * np.pi * np.random.rand(len(Xf)))
+    random_ph[0] = 1.0                          # keep DC
+    if n % 2 == 0:
+        random_ph[-1] = 1.0                    # keep Nyquist if it exists
+    Xf_surr = np.abs(Xf) * random_ph
+    return irfft(Xf_surr, n)
+
+def _iaaft(x, n_iter=1000, atol=1e-8):
+    """
+    Iterative Amplitude Adjusted FT surrogate.
+    Preserves both amplitude distribution and power spectrum.
+    """
+    # initial random permutation
+    s = np.random.permutation(x)
+    amp_orig = np.sort(x)
+    spec_orig = np.abs(rfft(x))
+
+    for _ in range(n_iter):
+        # impose power spectrum
+        S = rfft(s)
+        S = spec_orig * np.exp(1j * np.angle(S))
+        s = irfft(S, len(x))
+        # impose amplitude distribution
+        ranks = np.argsort(s)
+        s[ranks] = amp_orig
+        # optional early stop
+        if np.linalg.norm(np.abs(rfft(s)) - spec_orig) < atol:
+            break
+    return s
+# ─────────────────────────────────────────────────────────────
+
+
+def _digitize_safe(arr, edges, n_bins):
+    """Return integer states in 0 … n_bins-1, guaranteed non-negative."""
+    return np.clip(np.digitize(arr, edges) - 1, 0, n_bins - 1).astype(np.int32)
+
+def transfer_entropy_specsurrogate_test(
+    forcing, sq, k=1,
+    forcing_bins=4, sq_bins=2,
+    n_surr=100, p=0.05,
+    sq_method='hist',
+    binary=False,
+    surrogate_type='iaaft',
+    n_iter_iaaft=1000,
+    if_plot=True, dpi=100
+):
+    # 1  reverse time axis
+    x = np.asarray(forcing)[::-1].astype(float)
+    y = np.asarray(sq)[::-1].astype(float)
+
+    # 2  choose bin edges *once* from the original series
+    xbins = np.histogram_bin_edges(x, bins=forcing_bins)
+
+    if sq_method == 'quantile':
+        ybins = np.quantile(y, np.linspace(0, 1, sq_bins + 1))
+    elif sq_method == 'hist':
+        ybins = np.histogram_bin_edges(y, bins=sq_bins)
+    elif sq_method == 'kmeans':
+        km = KMeans(n_clusters=sq_bins, n_init=10, random_state=0)
+        y_disc = km.fit_predict(y.reshape(-1, 1))
+        ybins = None  # not used later
+    else:
+        raise ValueError("sq_method must be 'hist', 'quantile', or 'kmeans'")
+
+    # 3  discretise
+    if sq_method in ('hist', 'quantile'):
+        y_disc = _digitize_safe(y, ybins, sq_bins)
+    if binary:
+        y_disc = y.astype(np.int32)
+
+    x_disc = _digitize_safe(x, xbins, forcing_bins)
+
+    # 4  empirical TE
+    te_xy = transfer_entropy(x_disc, y_disc, k=k)
+    te_yx = transfer_entropy(y_disc, x_disc, k=k)
+
+    # 5  surrogates
+    null_xy = np.empty(n_surr)
+    null_yx = np.empty(n_surr)
+
+    for i in range(n_surr):
+        if surrogate_type == 'shuffle':
+            xs = np.random.permutation(x)
+        elif surrogate_type == 'phase':
+            xs = _phase_randomised(x)
+        elif surrogate_type == 'iaaft':
+            xs = _iaaft(x, n_iter=n_iter_iaaft)
+        else:
+            raise ValueError("surrogate_type must be 'shuffle', 'phase', 'iaaft'")
+
+        xs_disc = _digitize_safe(xs, xbins, forcing_bins)
+        null_xy[i] = transfer_entropy(xs_disc, y_disc, k=k)
+
+        ys = np.random.permutation(y_disc)
+        null_yx[i] = transfer_entropy(ys, x_disc, k=k)
+
+    # 6  p-values
+    p_xy = (null_xy >= te_xy).sum() / n_surr
+    p_yx = (null_yx >= te_yx).sum() / n_surr
+
+    fig = None
+    if if_plot:
+        fig = plt.figure(figsize=(5, 3.5), dpi=dpi)
+
+        plt.hist(null_xy, bins=25, alpha=0.7, color='#CC6677',
+                 label=f'Null TE ({surrogate_type} forcing→sq)',
+                 edgecolor='white')
+        plt.axvline(te_xy, color='#882255', lw=2,
+                    label=f'TE (forcing→sq), p={p_xy:.3f}')
+
+        plt.hist(null_yx, bins=25, alpha=0.7, color='#88CCEE',
+                 label='Null TE (sq→forcing)', edgecolor='white')
+        plt.axvline(te_yx, color='#44AA99', lw=2,
+                    label=f'TE (sq→forcing), p={p_yx:.3f}')
+
+        for spine in plt.gca().spines.values():
+            spine.set_linewidth(1.5)
+        plt.xlabel('Transfer Entropy (bits)')
+        plt.ylabel('Count')
+        plt.legend(frameon=True)
+        plt.tight_layout()
+        plt.show()
+
+    sig_xy = p_xy < p
+    sig_yx = p_yx < p
+    return sig_xy and not sig_yx, fig, te_xy
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
