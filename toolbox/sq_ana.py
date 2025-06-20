@@ -2996,103 +2996,222 @@ def predict_events_future(df_pre,          # original training dataframe
 
 
 
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from matplotlib import cm
+
+# def flip_events(df_pre,
+#                 flip_prob,
+#                 window=20_000,              # yrs; change at will
+#                 forcing_column='pre',
+#                 time_column='age',
+#                 nbins_pre=4,
+#                 cmap_name='spring',
+#                 relative=True):
+#     """
+#     Convert P(flip) → expected number of flip events in a `window`-yr cycle
+#     and plot:
+#         • top  : pre signal with horizontal bin strips
+#         • lower: expected # flip events / window                (absolute mode)
+#                  OR the same series expressed relative to its
+#                  mean (=100 %)                                  (relative mode)
+
+#     Parameters
+#     ----------
+#     df_pre : pandas.DataFrame
+#     flip_prob : 1-D array-like, same length as df_pre
+#     window : int, optional
+#         Length of averaging window in years.
+#     forcing_column : str
+#         Column in *df_pre* holding the forcing signal (“pre”).
+#     time_column : str
+#         Column in *df_pre* holding the age/time ordinate (“age”).
+#     nbins_pre : int
+#         Number of bins for the coloured background strips.
+#     cmap_name : str
+#         Name of the Matplotlib colormap for the strips.
+#     relative : bool, default **True**
+#         If *True*, scale the expected-events series so that its
+#         mean equals 100 %.  If *False*, plot the absolute counts.
+
+#     Returns
+#     -------
+#     events : 1-D numpy.ndarray
+#         The series that was actually plotted (relative or absolute).
+#     """
+#     # ------------------------------------------------------------------ data
+#     t  = df_pre[time_column].values[::-1]                 # old → young
+#     dt = float(np.abs(np.median(np.diff(t))))             # median spacing
+
+#     events_abs = (window * flip_prob) / dt                # N = W * p / dt
+
+#     if relative:
+#         mean_val = events_abs.mean()
+#         if mean_val == 0:
+#             raise ValueError("Mean of events is zero; cannot form relative values.")
+#         events = 100.0 * events_abs / mean_val
+#     else:
+#         events = events_abs
+
+#     pre_raw  = df_pre[forcing_column].values[::-1]
+#     bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+
+#     # ----------------------------------------------------------- figure setup
+#     fig = plt.figure(figsize=(12, 5))
+#     gs  = fig.add_gridspec(2, 1, height_ratios=[0.9, 1.3], hspace=0)
+
+#     # ── (a) top: pre, with horizontal bands for bins ────────────────────────
+#     ax0 = fig.add_subplot(gs[0])
+
+#     cmap = cm.get_cmap(cmap_name, nbins_pre)
+#     for i in range(nbins_pre):
+#         y0, y1 = bins_pre[i], bins_pre[i + 1]
+#         ax0.axhspan(y0, y1,
+#                     facecolor=cmap(i),
+#                     alpha=0.5,
+#                     zorder=0,
+#                     edgecolor='none')
+#         ax0.axhline(bins_pre[i], color='white', lw=0.8)
+
+#     ax0.plot(t, pre_raw, color='C0', zorder=2)
+#     ax0.set_ylabel(forcing_column)
+#     ax0.set_xlim(t[1], t[-1])
+#     ax0.tick_params(axis='x', labelbottom=False)
+#     ax0.set_yticks(bins_pre)
+#     ax0.set_yticklabels([f'{b:.2g}' for b in bins_pre])
+
+#     # ── (b) bottom: expected events ─────────────────────────────────────────
+#     ax1 = fig.add_subplot(gs[1], sharex=ax0)
+#     ax1.plot(t[1:], events,
+#              color='C3',
+#              label=(
+#                  f'Expected # flips / {window:,} yr'
+#                  if not relative else
+#                  'Relative # flips (mean = 100 %)'
+#              ))
+#     ax1.set_xlabel(time_column)
+#     if relative:
+#         ax1.set_ylabel('Events (% of mean)')
+#         # optional visual guide at 100 %
+#         ax1.axhline(100, color='grey', ls='--', lw=0.8, zorder=0)
+#     else:
+#         ax1.set_ylabel('Events (count)')
+#     ax1.legend(loc='upper right')
+
+#     plt.show()
+#     return events
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 
 def flip_events(df_pre,
                 flip_prob,
-                window=20_000,              # yrs; change at will
+                window=20_000,               # yrs
                 forcing_column='pre',
                 time_column='age',
                 nbins_pre=4,
                 cmap_name='spring',
                 relative=True):
     """
-    Convert P(flip) → expected number of flip events in a `window`-yr cycle
-    and plot:
-        • top  : pre signal with horizontal bin strips
-        • lower: expected # flip events / window                (absolute mode)
-                 OR the same series expressed relative to its
-                 mean (=100 %)                                  (relative mode)
-
-    Parameters
-    ----------
-    df_pre : pandas.DataFrame
-    flip_prob : 1-D array-like, same length as df_pre
-    window : int, optional
-        Length of averaging window in years.
-    forcing_column : str
-        Column in *df_pre* holding the forcing signal (“pre”).
-    time_column : str
-        Column in *df_pre* holding the age/time ordinate (“age”).
-    nbins_pre : int
-        Number of bins for the coloured background strips.
-    cmap_name : str
-        Name of the Matplotlib colormap for the strips.
-    relative : bool, default **True**
-        If *True*, scale the expected-events series so that its
-        mean equals 100 %.  If *False*, plot the absolute counts.
-
-    Returns
-    -------
-    events : 1-D numpy.ndarray
-        The series that was actually plotted (relative or absolute).
+    As before, but background bins are drawn as VERTICAL bands
+    in both sub-plots instead of horizontal strips.
     """
-    # ------------------------------------------------------------------ data
-    t  = df_pre[time_column].values[::-1]                 # old → young
-    dt = float(np.abs(np.median(np.diff(t))))             # median spacing
+    # ------------------------------- data & basic series --------------------
+    t  = df_pre[time_column].values[::-1]          # old → young
+    dt = float(np.abs(np.median(np.diff(t))))      # median spacing (yrs)
 
-    events_abs = (window * flip_prob) / dt                # N = W * p / dt
+    events_abs = (window * flip_prob) / dt         # expected N flips / sample
 
     if relative:
         mean_val = events_abs.mean()
         if mean_val == 0:
-            raise ValueError("Mean of events is zero; cannot form relative values.")
+            raise ValueError("Mean of events is zero; cannot normalise.")
         events = 100.0 * events_abs / mean_val
     else:
         events = events_abs
 
     pre_raw  = df_pre[forcing_column].values[::-1]
     bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+    bin_idx  = np.digitize(pre_raw, bins_pre, right=False) - 1   # 0 … nbins_pre-1
+    cmap     = cm.get_cmap(cmap_name, nbins_pre)
 
-    # ----------------------------------------------------------- figure setup
+    # ------------------------------- figure ---------------------------------
     fig = plt.figure(figsize=(12, 5))
     gs  = fig.add_gridspec(2, 1, height_ratios=[0.9, 1.3], hspace=0)
 
-    # ── (a) top: pre, with horizontal bands for bins ────────────────────────
     ax0 = fig.add_subplot(gs[0])
+    ax1 = fig.add_subplot(gs[1], sharex=ax0)
 
-    cmap = cm.get_cmap(cmap_name, nbins_pre)
-    for i in range(nbins_pre):
-        y0, y1 = bins_pre[i], bins_pre[i + 1]
-        ax0.axhspan(y0, y1,
-                    facecolor=cmap(i),
-                    alpha=0.5,
-                    zorder=0,
-                    edgecolor='none')
-        ax0.axhline(bins_pre[i], color='white', lw=0.8)
+    # ---------- draw VERTICAL colour bands on both axes --------------------
+    def _add_vertical_bands(ax):
+        start = 0
+        for i in range(1, len(t)):
+            if bin_idx[i] != bin_idx[i-1]:
+                # flush previous segment
+                x0, x1 = t[start], t[i]
+                ax.axvspan(min(x0, x1), max(x0, x1),
+                           facecolor=cmap(bin_idx[i-1]),
+                           alpha=0.35,
+                           edgecolor='none',
+                           zorder=0)
+                start = i
+        # flush final segment
+        x0, x1 = t[start], t[-1]
+        ax.axvspan(min(x0, x1), max(x0, x1),
+                   facecolor=cmap(bin_idx[-1]),
+                   alpha=0.35,
+                   edgecolor='none',
+                   zorder=0)
 
+    _add_vertical_bands(ax0)
+    _add_vertical_bands(ax1)
+
+    # ---------- upper panel: pre -------------------------------------------
     ax0.plot(t, pre_raw, color='C0', zorder=2)
     ax0.set_ylabel(forcing_column)
     ax0.set_xlim(t[1], t[-1])
     ax0.tick_params(axis='x', labelbottom=False)
+
+    # y-ticks at bin edges for reference
     ax0.set_yticks(bins_pre)
     ax0.set_yticklabels([f'{b:.2g}' for b in bins_pre])
 
-    # ── (b) bottom: expected events ─────────────────────────────────────────
-    ax1 = fig.add_subplot(gs[1], sharex=ax0)
-    ax1.plot(t[1:], events,
-             color='C3',
-             label=(
-                 f'Expected # flips / {window:,} yr'
-                 if not relative else
-                 'Relative # flips (mean = 100 %)'
-             ))
+    # ---------- lower panel: expected flips --------------------------------
+        # ---------- lower panel: expected flips --------------------------------
+    # make the two series equal length
+    tt = t[-len(events):]            # take the tail of t that matches events
+
+    ax1.plot(tt, events, color='C3',
+             label=('Relative # flips (mean = 100 %)'
+                    if relative else
+                    f'Expected # flips / {window:,} yr'))
+
+    # ax1.plot(t, events[1:], color='C3',
+    #          label=('Relative # flips (mean = 100 %)'
+    #                 if relative else
+    #                 f'Expected # flips / {window:,} yr'))
     ax1.set_xlabel(time_column)
     if relative:
         ax1.set_ylabel('Events (% of mean)')
-        # optional visual guide at 100 %
         ax1.axhline(100, color='grey', ls='--', lw=0.8, zorder=0)
     else:
         ax1.set_ylabel('Events (count)')
@@ -3100,22 +3219,6 @@ def flip_events(df_pre,
 
     plt.show()
     return events
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -3685,41 +3788,87 @@ def predict_events_future_ccm(df_pre_train,       # historical pre
     pad[idx_future] = events_upper
     events_upper = pad
 
-    # -------- 4) PLOT --------------------------------------------------------
+    # # -------- 4) PLOT --------------------------------------------------------
+    # from matplotlib import cm
+    # nbins_pre = 6
+    # bins_pre  = np.histogram_bin_edges(pre_train, bins=nbins_pre)
+
+    # fig = plt.figure(figsize=(4, 5))
+    # gs  = fig.add_gridspec(2, 1, height_ratios=[1, 3], hspace=0)
+
+    # # (a) future pre with coloured bands
+    # ax0 = fig.add_subplot(gs[0])
+    # # cmap = colormaps[cmap_name] # cm.get_cmap(cmap_name, nbins_pre)
+    # cmap = cm.get_cmap(cmap_name, nbins_pre)
+    # for i in range(nbins_pre):
+    #     ax0.axhspan(bins_pre[i], bins_pre[i+1],
+    #                 facecolor=cmap(i), alpha=0.5)
+    #     ax0.axhline(bins_pre[i], color='white', lw=0.8)
+    # ax0.plot(t_future, pre_future, color='black', lw=1.4)
+    # ax0.set_ylabel(forcing_column)
+    # ax0.set_xlim(t_future[0], t_future[-1])
+    # ax0.tick_params(axis='x', labelbottom=False)
+
+    # # (b) forecasted events
+    # ax1 = fig.add_subplot(gs[1], sharex=ax0)
+    # ax1.plot(t_future, events_mean, color='C3', label='Mean forecast')
+    # # plot a horizontal line at median of events_train as the baseline
+    # ax1.axhline(np.median(events_train), color='C0', linestyle='--',
+    #             label='Median historical events')
+    # ax1.fill_between(t_future, events_lower, events_upper,
+    #                  color='C3', alpha=0.3,
+    #                  label=f'±{band_sigma:.0f} σ')
+    # ax1.set_xlabel(time_column)
+    # ax1.set_ylabel(f'Events / {window:,} yr, % of mean')
+    # ax1.legend(loc='lower right')
+
+    # plt.show()
+    # ------------------------------------------------------------------ plot ----
     from matplotlib import cm
     nbins_pre = 6
     bins_pre  = np.histogram_bin_edges(pre_train, bins=nbins_pre)
 
     fig = plt.figure(figsize=(4, 5))
-    gs  = fig.add_gridspec(2, 1, height_ratios=[1, 3], hspace=0)
+    gs  = fig.add_gridspec(2, 1, height_ratios=[1, 3], hspace=0.0)
 
-    # (a) future pre with coloured bands
+    # ── (a) future pre with *vertical* colour bands ────────────────────────────
     ax0 = fig.add_subplot(gs[0])
-    # cmap = colormaps[cmap_name] # cm.get_cmap(cmap_name, nbins_pre)
     cmap = cm.get_cmap(cmap_name, nbins_pre)
-    for i in range(nbins_pre):
-        ax0.axhspan(bins_pre[i], bins_pre[i+1],
-                    facecolor=cmap(i), alpha=0.5)
-        ax0.axhline(bins_pre[i], color='white', lw=0.8)
-    ax0.plot(t_future, pre_future, color='black', lw=1.4)
+
+    # assign each time step to a bin
+    bin_idx = np.digitize(pre_future, bins_pre, right=False) - 1
+
+    # draw contiguous vertical spans with same bin colour
+    start = 0
+    for i in range(1, len(t_future)):
+        if bin_idx[i] != bin_idx[i - 1]:
+            ax0.axvspan(t_future[start], t_future[i],
+                        facecolor=cmap(bin_idx[i - 1]), alpha=0.35, edgecolor='none')
+            start = i
+    # flush last segment
+    ax0.axvspan(t_future[start], t_future[-1],
+                facecolor=cmap(bin_idx[-1]), alpha=0.35, edgecolor='none')
+
+    ax0.plot(t_future, pre_future, color='black', lw=1.4, zorder=2)
     ax0.set_ylabel(forcing_column)
     ax0.set_xlim(t_future[0], t_future[-1])
     ax0.tick_params(axis='x', labelbottom=False)
 
-    # (b) forecasted events
+    # ── (b) forecasted events (unchanged) ──────────────────────────────────────
     ax1 = fig.add_subplot(gs[1], sharex=ax0)
     ax1.plot(t_future, events_mean, color='C3', label='Mean forecast')
-    # plot a horizontal line at median of events_train as the baseline
-    ax1.axhline(np.median(events_train), color='C0', linestyle='--',
+    ax1.axhline(np.median(events_train), color='C0', ls='--',
                 label='Median historical events')
     ax1.fill_between(t_future, events_lower, events_upper,
-                     color='C3', alpha=0.3,
-                     label=f'±{band_sigma:.0f} σ')
+                    color='C3', alpha=0.3,
+                    label=f'±{band_sigma:.0f} σ')
+
     ax1.set_xlabel(time_column)
     ax1.set_ylabel(f'Events / {window:,} yr, % of mean')
     ax1.legend(loc='lower right')
 
     plt.show()
+
     return events_mean, events_lower, events_upper
 
 
@@ -4692,6 +4841,73 @@ def interpolate_data_forcing(df_sq, interval, if_plot=False):
         plt.show()
 
     return df_sq_rs, df_pre_rs, df_obl_rs
+
+
+
+
+
+
+def interpolate_data_ecc(df_sq, interval, if_plot=False):
+
+    # 1) load raw precession & obliquity
+    ecc_path = r"D:\VScode\bipolar_seesaw_CCM\inso_data\ecc_1000_inter100.txt"
+
+    df_ecc_raw = pd.read_csv(ecc_path, sep=r'\s+', header=None, engine='python')
+
+    # convert to years & ensure age increasing
+    df_ecc_raw.iloc[:,0] = df_ecc_raw.iloc[:,0].abs() * 1000
+    df_ecc_raw = df_ecc_raw.iloc[::-1].reset_index(drop=True)
+    df_ecc_raw.columns = ['age','ecc']
+
+    # 2) compute overlapping age bounds
+    a_min = max(df_sq['age'].min(),
+                df_ecc_raw['age'].min(),
+               )
+    a_max = min(df_sq['age'].max(),
+                df_ecc_raw['age'].max(),
+                )
+
+    # 3) create unified age vector
+    new_age = np.arange(a_min, a_max + 1, interval)
+
+    # 4) interpolate each series onto new_age
+    def interp(df, col):
+        f = interp1d(df['age'], df[col],
+                     kind='nearest',
+                     bounds_error=False,
+                     fill_value="extrapolate")
+        return f(new_age)
+    
+    column_names = df_sq.columns[1]
+
+    df_sq_rs  = pd.DataFrame({'age': new_age,
+                              column_names: interp(df_sq, column_names)})
+    df_ecc_rs = pd.DataFrame({'age': new_age,
+                              'ecc': interp(df_ecc_raw, 'ecc')})
+
+    # 5) optional plotting
+    if if_plot:
+        fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True, tight_layout=True)
+        axes[0].plot(df_sq_rs['age'],  df_sq_rs[column_names],  color='black', label='sq')
+        axes[1].plot(df_ecc_rs['age'], df_ecc_rs['ecc'], color='blue',  label='ecc')
+        # axes[2].plot(df_obl_rs['age'], df_obl_rs['obl'], color='green', label='obl')
+        for ax in axes:
+            ax.legend()
+            ax.set_ylabel(ax.get_label())
+        axes[-1].set_xlabel('Age (years)')
+        plt.show()
+
+    return df_sq_rs, df_ecc_rs
+
+
+
+
+
+
+
+
+
+
 
 
 
