@@ -4787,8 +4787,10 @@ def interpolate_data_forcing(df_sq, interval, if_plot=False):
         Each has columns ['age', <variable>] on the same age grid.
     """
     # 1) load raw precession & obliquity
-    pre_path = r"D:\VScode\bipolar_seesaw_CCM\inso_data\pre_800_inter100.txt"
-    obl_path = r"D:\VScode\bipolar_seesaw_CCM\inso_data\obl_800_inter100.txt"
+    # pre_path = r"D:\VScode\bipolar_seesaw_CCM\inso_data\pre_800_inter100.txt"
+    # obl_path = r"D:\VScode\bipolar_seesaw_CCM\inso_data\obl_800_inter100.txt"
+    pre_path = r"D:\VScode\bipolar_seesaw_CCM\inso_data\pre_2000_inter100.txt"
+    obl_path = r"D:\VScode\bipolar_seesaw_CCM\inso_data\obl_2000_inter100.txt"
     df_pre_raw = pd.read_csv(pre_path, sep=r'\s+', header=None, engine='python')
     df_obl_raw = pd.read_csv(obl_path, sep=r'\s+', header=None, engine='python')
 
