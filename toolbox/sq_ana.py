@@ -394,6 +394,7 @@ def freq_resolved_te(
     trg_max_period=3_000,
     n_trg_scales=64,
     k=1,
+    binsp1=9,
     plot=True,
     cmap='viridis',
     source_vname='Precession',       # e.g. 'pre'
@@ -448,7 +449,7 @@ def freq_resolved_te(
         % (row_max, periods_x[row_max]/1000))
 
     # ---------- 2. discretise phase ----------------------------
-    bins = np.linspace(-np.pi, np.pi, 9)
+    bins = np.linspace(-np.pi, np.pi, binsp1)
     disc_x = np.digitize(np.angle(coeffs_x), bins) - 1
     disc_y = np.digitize(np.angle(coeffs_y), bins) - 1
 
