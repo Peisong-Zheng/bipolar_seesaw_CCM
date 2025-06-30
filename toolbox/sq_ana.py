@@ -1826,7 +1826,11 @@ def prob_prebins_events_surr_relative(
     window=20_000,                 # yrs
     relative=True,
     y_min=None,
-    y_max=None
+    y_max=None,
+    dpi=100,
+    panel_label=None,
+    save_figure=False,
+    proxy_name=None,
 ):
     """
     Bar plot of expected # flip events per precession-bin
@@ -1908,7 +1912,7 @@ def prob_prebins_events_surr_relative(
     edgecol = np.where(pvals < alpha, 'k', 'grey')
     hatches = ['' if p < alpha else '////' for p in pvals]
 
-    fig, ax = plt.subplots(figsize=(6, 4))
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=dpi)
 
     # bars
     for xi, ev, c, ec, ht in zip(x, events_obs, barcol, edgecol, hatches):
@@ -1933,7 +1937,7 @@ def prob_prebins_events_surr_relative(
 
     # axis limits
     if y_min is None or y_max is None:
-        pad = 0.08 * (events_obs.max() - events_obs.min())
+        pad = 0.08 * (events_obs.max() - events_obs.min()) 
         y_min = events_obs.min() - pad if y_min is None else y_min
         y_max = events_obs.max() + pad if y_max is None else y_max
     ax.set_ylim(y_min, y_max)
@@ -1941,7 +1945,7 @@ def prob_prebins_events_surr_relative(
     ax.set_xticks(x)
     ax.set_xlabel(f'{forcing_column} bin (0 … {nbins_pre-1})')
     if relative:
-        ax.set_ylabel('Flip events (% of mean)')
+        ax.set_ylabel('Flip events (% of the mean)')
         ax.axhline(100, color='grey', ls='--', lw=0.8, zorder=0)
     else:
         ax.set_ylabel(f'Flip events / {window:,} yr')
@@ -1963,7 +1967,9 @@ def prob_prebins_events_surr_relative(
                    zorder=lc.get_zorder() + 1)
 
     y0, y1 = ax.get_ylim()
-    y_arrow = y0 + 0.03 * (y1 - y0)
+    y_arrow = y1 + 0.1 * (y1 - y0)
+    # reset the ylim
+    ax.set_ylim(y0, y_arrow + 0.1 * (y1 - y0))
     gradient_arrow(nbins_pre/2, 0,           y_arrow, cmap_a, norm, ax, dir='left')
     gradient_arrow(nbins_pre/2, nbins_pre-1, y_arrow, cmap_a, norm, ax, dir='right')
 
@@ -1973,6 +1979,12 @@ def prob_prebins_events_surr_relative(
     ax.text(nbins_pre*4/6, y_arrow + 0.06*(y1 - y0),
             'Precession ↑, Insolation ↓',
             ha='center', va='top', fontsize=9)
+    
+    # ── panel label if provided ───────────────────────────────────────
+    if panel_label is not None:
+        ax.text(-0.06, 1.1, panel_label,
+                transform=ax.transAxes, fontsize=12,
+                ha='left', va='top', fontweight='bold')
 
     # thicker axes
     for spine in ax.spines.values():
@@ -1981,6 +1993,12 @@ def prob_prebins_events_surr_relative(
     ax.legend(loc='upper right', frameon=False)
     plt.tight_layout()
     plt.show()
+
+    # if save figure, save it as .pdf in vector fomart to /Figure_saved, merge the proxy name into the file name
+    if save_figure and proxy_name is not None:
+        fig.savefig(f'Figure_saved/{proxy_name}_prebins_events_surr_relative.pdf',
+                    bbox_inches='tight', dpi=dpi, transparent=True)
+        print(f"Figure saved as 'Figure_saved/{proxy_name}_prebins_events_surr_relative.pdf'")
 
     return events_obs, mu_surr, sd_surr, pvals
 
@@ -3705,6 +3723,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.spatial import cKDTree            
 from matplotlib import colormaps
+from matplotlib import cm
+import matplotlib.colors as mcolors            # ← 1) bring in `colors`
 
 
 # ───────────────────────── helper: delay-coordinate embedding ──────────────
@@ -3726,7 +3746,18 @@ def predict_events_future_ccm(df_pre_train,       # historical pre
                               band_sigma=1.0,     # width of uncertainty band
                               forcing_column='pre',
                               time_column='age',
-                              cmap_name='tab20c'):
+                              cmap_name='tab20c',
+                              panel_label=None,
+                              save_fig=False,
+                              proxy_name=None,
+                              xmax=20_000,
+                              dpi=100,
+                              ymin=75,
+                              y_max=130,
+                              show_cb=False,
+                              show_legend=False,
+                              
+                              ):
     """
     Forecast future event counts using a simplex/CCM-style nearest-neighbour
     mapping in precession state-space.
@@ -3789,47 +3820,12 @@ def predict_events_future_ccm(df_pre_train,       # historical pre
     pad[idx_future] = events_upper
     events_upper = pad
 
-    # # -------- 4) PLOT --------------------------------------------------------
-    # from matplotlib import cm
-    # nbins_pre = 6
-    # bins_pre  = np.histogram_bin_edges(pre_train, bins=nbins_pre)
-
-    # fig = plt.figure(figsize=(4, 5))
-    # gs  = fig.add_gridspec(2, 1, height_ratios=[1, 3], hspace=0)
-
-    # # (a) future pre with coloured bands
-    # ax0 = fig.add_subplot(gs[0])
-    # # cmap = colormaps[cmap_name] # cm.get_cmap(cmap_name, nbins_pre)
-    # cmap = cm.get_cmap(cmap_name, nbins_pre)
-    # for i in range(nbins_pre):
-    #     ax0.axhspan(bins_pre[i], bins_pre[i+1],
-    #                 facecolor=cmap(i), alpha=0.5)
-    #     ax0.axhline(bins_pre[i], color='white', lw=0.8)
-    # ax0.plot(t_future, pre_future, color='black', lw=1.4)
-    # ax0.set_ylabel(forcing_column)
-    # ax0.set_xlim(t_future[0], t_future[-1])
-    # ax0.tick_params(axis='x', labelbottom=False)
-
-    # # (b) forecasted events
-    # ax1 = fig.add_subplot(gs[1], sharex=ax0)
-    # ax1.plot(t_future, events_mean, color='C3', label='Mean forecast')
-    # # plot a horizontal line at median of events_train as the baseline
-    # ax1.axhline(np.median(events_train), color='C0', linestyle='--',
-    #             label='Median historical events')
-    # ax1.fill_between(t_future, events_lower, events_upper,
-    #                  color='C3', alpha=0.3,
-    #                  label=f'±{band_sigma:.0f} σ')
-    # ax1.set_xlabel(time_column)
-    # ax1.set_ylabel(f'Events / {window:,} yr, % of mean')
-    # ax1.legend(loc='lower right')
-
-    # plt.show()
     # ------------------------------------------------------------------ plot ----
-    from matplotlib import cm
+   
     nbins_pre = 6
     bins_pre  = np.histogram_bin_edges(pre_train, bins=nbins_pre)
 
-    fig = plt.figure(figsize=(4, 5))
+    fig = plt.figure(figsize=(4, 5),dpi=dpi)
     gs  = fig.add_gridspec(2, 1, height_ratios=[1, 3], hspace=0.0)
 
     # ── (a) future pre with *vertical* colour bands ────────────────────────────
@@ -3850,25 +3846,133 @@ def predict_events_future_ccm(df_pre_train,       # historical pre
     ax0.axvspan(t_future[start], t_future[-1],
                 facecolor=cmap(bin_idx[-1]), alpha=0.35, edgecolor='none')
 
+
+
     ax0.plot(t_future, pre_future, color='black', lw=1.4, zorder=2)
     ax0.set_ylabel(forcing_column)
     ax0.set_xlim(t_future[0], t_future[-1])
     ax0.tick_params(axis='x', labelbottom=False)
+    # add the panel label if provided
+    if panel_label is not None:
+        ax0.text(-0.1, 1.1, panel_label, transform=ax0.transAxes,
+                 fontsize=12, fontweight='bold', va='top', ha='left')
+                 
+
+
+
 
     # ── (b) forecasted events (unchanged) ──────────────────────────────────────
     ax1 = fig.add_subplot(gs[1], sharex=ax0)
-    ax1.plot(t_future, events_mean, color='C3', label='Mean forecast')
-    ax1.axhline(np.median(events_train), color='C0', ls='--',
-                label='Median historical events')
+    ax1.plot(t_future, events_mean, color='C3', label='Forecast')
+    ax1.axhline(np.mean(events_train), color='C0', ls='--',
+                label='Mean historical events')
     ax1.fill_between(t_future, events_lower, events_upper,
                     color='C3', alpha=0.3,
                     label=f'±{band_sigma:.0f} σ')
 
+    # set y-limits
+    ax1.set_ylim(ymin, y_max)
     ax1.set_xlabel(time_column)
     ax1.set_ylabel(f'Events / {window:,} yr, % of mean')
-    ax1.legend(loc='lower right')
+    if show_legend:
+        ax1.legend(loc='lower right')
+
+    # set the xlim between 0 to xmax
+    ax1.set_xlim(0, xmax)
+
+
+    # if show_cb, plot a verticle colorbar for the vertical spans
+    # ── add colour-bar ---------------------------------------------------------
+    # if show_cb:
+
+    #     # discrete mapping: one colour per precession bin
+    #     norm = mcolors.BoundaryNorm(bins_pre, cmap.N)
+    #     sm   = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    #     sm.set_array([])                # Matplotlib ≤3.8 requirement
+
+    #     # ------------------------------------------------------------------
+    #     # 1. Build a *floating* colour-bar axis that does NOT steal space
+    #     #    from the main sub-plots.
+    #     #    Place it to the right of the figure, vertically centred on
+    #     #    the combined height of ax0 & ax1.
+    #     # ------------------------------------------------------------------
+    #     box0 = ax0.get_position()       # bounding boxes of the two panels
+    #     box1 = ax1.get_position()
+
+    #     y0   = box1.y0                  # bottom of lower panel
+    #     y1   = box0.y1                  # top of upper panel
+    #     cbar_height = y1 - y0           # span both panels
+    #     cbar_width  = 0.02              # relative figure width
+    #     cbar_xpad   = 0.02              # gap between plots and colour-bar
+
+    #     cax = fig.add_axes([box1.x1 + cbar_xpad,   # left
+    #                         y0,                    # bottom
+    #                         cbar_width,            # width
+    #                         cbar_height])          # height
+
+    #     # 2. Draw *discrete* colour-bar
+    #     #    - `boundaries` + `norm` give stepwise colours
+    #     #    - ticks at bin mid-points look cleaner
+    #     mid = 0.5 * (bins_pre[:-1] + bins_pre[1:])
+
+    #     cbar = fig.colorbar(sm,
+    #                         cax=cax,
+    #                         boundaries=bins_pre,
+    #                         spacing='proportional')   # -> blocky steps
+    #     cbar.set_ticks(mid)
+    #     cbar.set_ticklabels([f'{m:.0f}' for m in mid])  # optional formatting
+    #     cbar.ax.set_ylabel(forcing_column)
+    if show_cb:
+        # import matplotlib.colors as mcolors
+
+        # ── discrete, *opaque* colours
+        norm = mcolors.BoundaryNorm(bins_pre, cmap.N)
+        sm   = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+
+        box0 = ax0.get_position()       # bounding boxes of the two panels
+        box1 = ax1.get_position()
+
+        y0   = box1.y0                  # bottom of lower panel
+        y1   = box0.y1                  # top of upper panel
+        cbar_height = y1 - y0           # span both panels
+        cbar_width  = 0.02              # relative figure width
+        cbar_xpad   = 0.02              # gap between plots and colour-bar
+
+        cax = fig.add_axes([box1.x1 + cbar_xpad,   # left
+                            y0,                    # bottom
+                            cbar_width,            # width
+                            cbar_height])          # height
+
+        # 2. Draw *discrete* colour-bar
+        #    - `boundaries` + `norm` give stepwise colours
+        #    - ticks at bin mid-points look cleaner
+        mid = 0.5 * (bins_pre[:-1] + bins_pre[1:])
+
+        cbar = fig.colorbar(
+            sm, cax=cax, boundaries=bins_pre, spacing='proportional'
+        )
+
+        # ──────────────────────────────────────────────────────────────
+        # 1. Make the colour blocks *match the span-alpha* (e.g. 0.35)
+        #    This touches the PolyCollection that fills the bar.
+        cbar.solids.set_alpha(0.35)          # or your preferred value
+        # ──────────────────────────────────────────────────────────────
+        # 2. Relabel ticks 1 … nbins_pre instead of showing data mid-points
+        mid = 0.5 * (bins_pre[:-1] + bins_pre[1:])
+        cbar.set_ticks(mid)
+        cbar.set_ticklabels([str(i + 1) for i in range(nbins_pre)])
+        # ──────────────────────────────────────────────────────────────
+
+        cbar.ax.set_ylabel(forcing_column)   # keep or modify as needed
+
 
     plt.show()
+
+    # save figure as .pdf vector to /Figure_saved, merge the proxy name into the file name
+    if save_fig and proxy_name is not None:
+        fig.savefig(f'Figure_saved/{proxy_name}_ccm_forecast.pdf', bbox_inches='tight')
+        print(f"Figure saved as 'Figure_saved/{proxy_name}_ccm_forecast.pdf'")
 
     return events_mean, events_lower, events_upper
 
