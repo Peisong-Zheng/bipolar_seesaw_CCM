@@ -1804,6 +1804,11 @@ def _events_from_counts(counts, window, dt, *, relative):
         p_flip = np.divide(N_flip, N_tot, where=N_tot > 0)  # P(flip)_j
 
     events_abs = (window * p_flip) / dt                     # expected # flips
+
+    # smooth the events_abs with a 1000 window running mean, make sure the smoothed data is in the same length
+    # print(events_abs.shape)
+    # events_abs = np.convolve(events_abs, np.ones(1000)/1000, mode='same')
+
     if relative:
         mean_val = events_abs.mean()
         if mean_val == 0:
@@ -1885,7 +1890,7 @@ def prob_prebins_events_surr_relative(
     # ---------- 2) observed events ----------
     counts_obs   = _count_tensor(pre_disc, sq_disc, nbins_pre)
     events_obs   = _events_from_counts(counts_obs, window, dt, relative=relative)
-
+    # print(events_obs.shape)
     # ---------- 3) surrogates ----------
     events_surr = np.zeros((n_surr, nbins_pre))
     for s in range(n_surr):
@@ -1893,9 +1898,15 @@ def prob_prebins_events_surr_relative(
         counts_surr  = _count_tensor(pre_perm, sq_disc, nbins_pre)
         events_surr[s] = _events_from_counts(counts_surr, window, dt,
                                              relative=relative)
+        # events_surr[s] = np.convolve( events_surr[s], np.ones(1000)/1000, mode='same')
 
     mu_surr = np.nanmean(events_surr, axis=0)
     sd_surr = np.nanstd (events_surr, axis=0)
+
+
+    
+    # events_abs = np.convolve(events_abs, np.ones(1000)/1000, mode='same')
+
 
     # p-value: two-sided tail
     pvals = np.empty(nbins_pre)
@@ -1923,11 +1934,11 @@ def prob_prebins_events_surr_relative(
     for xi, ev, c, ec, ht in zip(x, events_obs, barcol, edgecol, hatches):
         ax.bar(xi, ev, color=c, edgecolor=ec, hatch=ht, linewidth=1.4)
 
-    # # surrogate mean ±1 σ
-    # ax.errorbar(x, mu_surr, yerr=2*sd_surr, fmt='o', color='k',
-    #             capsize=4, label='surrogate mean ±1σ')
+    # surrogate mean ±1 σ
+    ax.errorbar(x, mu_surr, yerr=2*sd_surr, fmt='o', color='k',
+                capsize=4, label='surrogate mean ±1σ')
 
-    lo, hi = np.percentile(events_surr, [2.5, 97.5], axis=0)
+    # lo, hi = np.percentile(events_surr, [2.5, 97.5], axis=0)
     # ax.errorbar(x, mu_surr, yerr=[mu_surr - lo, hi - mu_surr],
     #             fmt='o', color='k', capsize=4,
     #             label='surrogate mean (95 % envelope)')
