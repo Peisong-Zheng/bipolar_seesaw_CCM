@@ -1818,7 +1818,7 @@ def prob_prebins_events_surr_relative(
     forcing_column='pre',
     target_column='sq',
     time_column='age',
-    sq_method='hist',  # 'hist' or 'phase'
+    sq_method='hist',  
     nbins_pre=6,
     n_surr=100,
     alpha=0.05,
@@ -1854,6 +1854,8 @@ def prob_prebins_events_surr_relative(
     pre_raw = df_pre[forcing_column].values[::-1]
     sq_raw  = df_sq[target_column].values[::-1]
 
+    sq_raw = sq_raw -np.median(sq_raw)
+
     # time step (yrs) → dt
     t = df_pre[time_column].values[::-1]
     dt = float(np.abs(np.median(np.diff(t))))
@@ -1861,6 +1863,9 @@ def prob_prebins_events_surr_relative(
     if sq_method == 'hist':
 
         bins_pre = np.histogram_bin_edges(pre_raw, bins=nbins_pre)
+        
+        # sq_bins = np.histogram_bin_edges(sq_raw, bins=2)
+        # sq_disc = np.digitize(sq_raw, sq_bins) - 1
     elif sq_method == 'quantile':
         # --- quantile binning -----------------------------------------------------
         percentiles = np.linspace(0, 1, nbins_pre + 1)
@@ -1906,7 +1911,7 @@ def prob_prebins_events_surr_relative(
 
     # gradient colours for bars
     cmap   = plt.get_cmap('coolwarm')
-    cmap_a = plt.get_cmap('coolwarm_r')   # for gradient arrows
+    cmap_a = plt.get_cmap('coolwarm')   # for gradient arrows
     norm   = plt.Normalize(0, nbins_pre - 1)
     barcol = cmap(norm(x))
     edgecol = np.where(pvals < alpha, 'k', 'grey')
@@ -1973,11 +1978,19 @@ def prob_prebins_events_surr_relative(
     gradient_arrow(nbins_pre/2, 0,           y_arrow, cmap_a, norm, ax, dir='left')
     gradient_arrow(nbins_pre/2, nbins_pre-1, y_arrow, cmap_a, norm, ax, dir='right')
 
+    # ax.text(nbins_pre/6,   y_arrow + 0.06*(y1 - y0),
+    #         'Precession ↓, Insolation ↑',
+    #         ha='center', va='top', fontsize=9)
+    # ax.text(nbins_pre*4/6, y_arrow + 0.06*(y1 - y0),
+    #         'Precession ↑, Insolation ↓',
+    #         ha='center', va='top', fontsize=9)
+    
+
     ax.text(nbins_pre/6,   y_arrow + 0.06*(y1 - y0),
-            'Precession ↓, Insolation ↑',
+            'Precession ↓',
             ha='center', va='top', fontsize=9)
     ax.text(nbins_pre*4/6, y_arrow + 0.06*(y1 - y0),
-            'Precession ↑, Insolation ↓',
+            'Precession ↑',
             ha='center', va='top', fontsize=9)
     
     # ── panel label if provided ───────────────────────────────────────
