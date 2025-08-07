@@ -378,7 +378,7 @@ def thre_data_ana(
 
 import numpy as np, pywt, matplotlib.pyplot as plt
 from pyinform import transfer_entropy
-
+import os
 
 def freq_resolved_te(
     x, y,
@@ -397,32 +397,46 @@ def freq_resolved_te(
     binsp1=9,
     plot=True,
     cmap='viridis',
-    source_vname='Precession',       # e.g. 'pre'
-    target_vname='CH₄ MCV'        # e.g. 'sq'
+    source_vname='Precession',   # e.g. 'pre'
+    target_vname='CH₄ MCV',      # e.g. 'sq'
+    # ---- NEW I/O OPTIONS -------------------------------------
+    if_save=False,
+    save_file_path='Figures/',
+    panel_label='a',
+    v_max=None,
+    show_colorbar=True
 ):
     """
-    Wavelet-scale × wavelet-scale TE with *separate* period bands
+    Wavelet-scale × wavelet-scale TE with separate period bands
     for source (x) and target (y).
+
+    Parameters
+    ----------
+    if_save : bool
+        If True, the TE panel is replotted on its own and written to
+        a PDF file (vector format) in *save_file_path*.
+    save_file_path : str
+        Directory in which to place the PDF. Created if it does not exist.
 
     Returns
     -------
-    te_mat     : (n_src × n_trg) array
-    periods_x  : list (len n_src)  [yr]
-    periods_y  : list (len n_trg)  [yr]
+    te_mat     : (n_src × n_trg) ndarray
+    periods_x  : ndarray (len n_src)  [yr]
+    periods_y  : ndarray (len n_trg)  [yr]
     """
-    x= x[::-1]  # reverse chronological order
-    y= y[::-1]  # reverse chronological order
+    # --------- 0. housekeeping -------------------------------------------
+    x = x[::-1]            # reverse chronological order
+    y = y[::-1]
 
     if len(x) != len(y):
         raise ValueError("x and y must have equal length")
 
-    # ---------- helper: build scale list -----------------------
+    # ---------- helper: build scale list ---------------------------------
     fc = pywt.central_frequency(wavelet)
 
     def build_scales(min_p, max_p, n_sc):
         if np.isclose(min_p, max_p):
             ctr = min_p
-            # periods = ctr * np.geomspace(0.8, 1.2, n_sc)
             periods = ctr * np.geomspace(0, 1, n_sc)
         else:
             periods = np.geomspace(min_p, max_p, n_sc)
@@ -432,9 +446,8 @@ def freq_resolved_te(
                                        n_src_scales)
     periods_y, scales_y = build_scales(trg_min_period, trg_max_period,
                                        n_trg_scales)
-    print(scales_y)
 
-    # ---------- 1. CWT -----------------------------------------
+    # ---------- 1. CWT ----------------------------------------------------
     coeffs_x, _ = pywt.cwt(x, scales_x, wavelet,
                            sampling_period=sampling_period)
     coeffs_y, _ = pywt.cwt(y, scales_y, wavelet,
@@ -443,17 +456,12 @@ def freq_resolved_te(
     pow_x = np.abs(coeffs_x) ** 2
     pow_y = np.abs(coeffs_y) ** 2
 
-    # Immediately after pow_x is computed:
-    row_max = pow_x.mean(axis=1).argmax()
-    print("max-power row = %d   →  period ≈ %.1f ka"
-        % (row_max, periods_x[row_max]/1000))
-
-    # ---------- 2. discretise phase ----------------------------
+    # ---------- 2. discretise phase --------------------------------------
     bins = np.linspace(-np.pi, np.pi, binsp1)
     disc_x = np.digitize(np.angle(coeffs_x), bins) - 1
     disc_y = np.digitize(np.angle(coeffs_y), bins) - 1
 
-    # ---------- 3. TE matrix -----------------------------------
+    # ---------- 3. TE matrix ---------------------------------------------
     te_mat = np.empty((len(scales_x), len(scales_y)))
     for i in range(len(scales_x)):        # src scale
         for j in range(len(scales_y)):    # trg scale
@@ -461,48 +469,230 @@ def freq_resolved_te(
                 disc_x[i, :-1], disc_y[j, 1:], k=k
             )
 
-    # ---------- 4. plots ---------------------------------------
-    if plot:
-        # --- build extents -------------------------------------------------
+    # ---------- 4. plotting ----------------------------------------------
+    if plot or if_save:
+        # build extents ----------------------------------------------------
         t_ka = np.arange(len(x)) * sampling_period / 1000   # time axis in ka
 
         extent_src = [t_ka[0], t_ka[-1],
-                    periods_x[0]/1000, periods_x[-1]/1000]   # low → high period
+                      periods_x[0]/1000, periods_x[-1]/1000]
         extent_trg = [t_ka[0], t_ka[-1],
-                    periods_y[0]/1000, periods_y[-1]/1000]
+                      periods_y[0]/1000, periods_y[-1]/1000]
+        extent_te  = [periods_y[0]/1000, periods_y[-1]/1000,
+                      periods_x[0]/1000, periods_x[-1]/1000]
 
-        extent_te  = [periods_y[0]/1000, periods_y[-1]/1000,   # x-axis  (target)
-                    periods_x[0]/1000, periods_x[-1]/1000]   # y-axis  (source)
+        # master figure ----------------------------------------------------
+        if plot:
+            fig, ax = plt.subplots(1, 3, figsize=(15, 3.5),
+                                   gridspec_kw={'width_ratios':[1,1,1.3]})
 
-        # --- plots ---------------------------------------------------------
-        fig, ax = plt.subplots(1, 3, figsize=(15, 3.5),
-                            gridspec_kw={'width_ratios':[1,1,1.3]})
+            im0 = ax[0].imshow(pow_x, origin='upper', aspect='auto',
+                               cmap='hot', extent=extent_src)
+            ax[0].set_title(f'source scalogram ({source_vname})')
+            ax[0].set_xlabel('time (ka BP)')
+            ax[0].set_ylabel('period (ka)')
+            plt.colorbar(im0, ax=ax[0], fraction=.046)
 
-        im0 = ax[0].imshow(pow_x, origin='upper', aspect='auto',
-                        cmap='hot', extent=extent_src)
-        ax[0].set_title('source scalogram (pre)')
-        ax[0].set_xlabel('time (ka BP)')
-        ax[0].set_ylabel('period (ka)')
-        plt.colorbar(im0, ax=ax[0], fraction=.046)
+            im1 = ax[1].imshow(pow_y, origin='upper', aspect='auto',
+                               cmap='hot', extent=extent_trg)
+            ax[1].set_title(f'target scalogram ({target_vname})')
+            ax[1].set_xlabel('time (ka BP)')
+            plt.colorbar(im1, ax=ax[1], fraction=.046)
 
-        im1 = ax[1].imshow(pow_y, origin='upper', aspect='auto',
-                        cmap='hot', extent=extent_trg)
-        ax[1].set_title('target scalogram (sq)')
-        ax[1].set_xlabel('time (ka BP)')
-        plt.colorbar(im1, ax=ax[1], fraction=.046)
+            im2 = ax[2].imshow(te_mat, origin='upper', aspect='auto',
+                               cmap=cmap, extent=extent_te,
+                               vmin=te_mat.min(), vmax=te_mat.max())
+            ax[2].set_title('TE (source phases → target phases)')
+            ax[2].set_xlabel(f'{target_vname} period (kyr)')
+            ax[2].set_ylabel(f'{source_vname} period (kyr)')
+            plt.colorbar(im2, ax=ax[2], fraction=.046)
 
-        # np.quantile(te_mat,0.5)
-        im2 = ax[2].imshow(te_mat, origin='upper', aspect='auto',
-                        cmap=cmap, extent=extent_te, vmin=te_mat.min() , vmax=te_mat.max())
-        ax[2].set_title('TE  (source phases → target phases)')
-        ax[2].set_xlabel(f'{target_vname} period (kyr)')
-        ax[2].set_ylabel(f'{source_vname} period (kyr)')
-        plt.colorbar(im2, ax=ax[2], fraction=.046)
+            plt.tight_layout()
+            plt.show()
 
-        plt.tight_layout(); plt.show()
+        # stand-alone TE panel & save -------------------------------------
+        if if_save:
+            # ensure directory exists
+            os.makedirs(save_file_path, exist_ok=True)
 
+            fig_te, ax_te = plt.subplots(figsize=(4.5, 3.5))
+            if v_max is not None:
+                im = ax_te.imshow(te_mat, origin='upper', aspect='auto',
+                                  cmap=cmap, extent=extent_te,
+                                  vmin=te_mat.min(), vmax=v_max)
+            else:
+                im = ax_te.imshow(te_mat, origin='upper', aspect='auto',
+                                cmap=cmap, extent=extent_te,
+                                vmin=te_mat.min(), vmax=te_mat.max())
+                
+            # ax_te.set_title('TE (source → target)')
+            ax_te.set_xlabel(f'{target_vname} period (kyr)')
+            ax_te.set_ylabel(f'{source_vname} period (kyr)')
+            if show_colorbar:
+                plt.colorbar(im, ax=ax_te, fraction=.046)
+            # add 'a' on top left corner (-0.05, 1.05) in axes coords
+            ax_te.text(-0.06, 1.06, panel_label, transform=ax_te.transAxes,
+                        fontsize=12, fontweight='bold')
 
+            filename = os.path.join(
+                save_file_path,
+                f"TE_{source_vname}_to_{target_vname}.pdf"
+            )
+            
+            fig_te.savefig(filename, format='pdf', bbox_inches='tight')
+            plt.show()
+            plt.close(fig_te)   # free memory
+
+    # ---------------------------------------------------------------------
     return te_mat, periods_x, periods_y
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# def freq_resolved_te(
+#     x, y,
+#     *,
+#     wavelet='cmor1.5-1.0',
+#     sampling_period=10,          # yr per sample
+#     # ---- source (pre) band -----------------------------------
+#     src_min_period=20_000,       # yr
+#     src_max_period=20_000,
+#     n_src_scales=3,              # if min=max, use 3 scales around it
+#     # ---- target (sq) band ------------------------------------
+#     trg_min_period=100,          # yr
+#     trg_max_period=3_000,
+#     n_trg_scales=64,
+#     k=1,
+#     binsp1=9,
+#     plot=True,
+#     cmap='viridis',
+#     source_vname='Precession',       # e.g. 'pre'
+#     target_vname='CH₄ MCV'        # e.g. 'sq'
+# ):
+#     """
+#     Wavelet-scale × wavelet-scale TE with *separate* period bands
+#     for source (x) and target (y).
+
+#     Returns
+#     -------
+#     te_mat     : (n_src × n_trg) array
+#     periods_x  : list (len n_src)  [yr]
+#     periods_y  : list (len n_trg)  [yr]
+#     """
+#     x= x[::-1]  # reverse chronological order
+#     y= y[::-1]  # reverse chronological order
+
+#     if len(x) != len(y):
+#         raise ValueError("x and y must have equal length")
+
+#     # ---------- helper: build scale list -----------------------
+#     fc = pywt.central_frequency(wavelet)
+
+#     def build_scales(min_p, max_p, n_sc):
+#         if np.isclose(min_p, max_p):
+#             ctr = min_p
+#             # periods = ctr * np.geomspace(0.8, 1.2, n_sc)
+#             periods = ctr * np.geomspace(0, 1, n_sc)
+#         else:
+#             periods = np.geomspace(min_p, max_p, n_sc)
+#         return periods, periods * fc / sampling_period
+
+#     periods_x, scales_x = build_scales(src_min_period, src_max_period,
+#                                        n_src_scales)
+#     periods_y, scales_y = build_scales(trg_min_period, trg_max_period,
+#                                        n_trg_scales)
+#     print(scales_y)
+
+#     # ---------- 1. CWT -----------------------------------------
+#     coeffs_x, _ = pywt.cwt(x, scales_x, wavelet,
+#                            sampling_period=sampling_period)
+#     coeffs_y, _ = pywt.cwt(y, scales_y, wavelet,
+#                            sampling_period=sampling_period)
+
+#     pow_x = np.abs(coeffs_x) ** 2
+#     pow_y = np.abs(coeffs_y) ** 2
+
+#     # Immediately after pow_x is computed:
+#     row_max = pow_x.mean(axis=1).argmax()
+#     print("max-power row = %d   →  period ≈ %.1f ka"
+#         % (row_max, periods_x[row_max]/1000))
+
+#     # ---------- 2. discretise phase ----------------------------
+#     bins = np.linspace(-np.pi, np.pi, binsp1)
+#     disc_x = np.digitize(np.angle(coeffs_x), bins) - 1
+#     disc_y = np.digitize(np.angle(coeffs_y), bins) - 1
+
+#     # ---------- 3. TE matrix -----------------------------------
+#     te_mat = np.empty((len(scales_x), len(scales_y)))
+#     for i in range(len(scales_x)):        # src scale
+#         for j in range(len(scales_y)):    # trg scale
+#             te_mat[i, j] = transfer_entropy(
+#                 disc_x[i, :-1], disc_y[j, 1:], k=k
+#             )
+
+#     # ---------- 4. plots ---------------------------------------
+#     if plot:
+#         # --- build extents -------------------------------------------------
+#         t_ka = np.arange(len(x)) * sampling_period / 1000   # time axis in ka
+
+#         extent_src = [t_ka[0], t_ka[-1],
+#                     periods_x[0]/1000, periods_x[-1]/1000]   # low → high period
+#         extent_trg = [t_ka[0], t_ka[-1],
+#                     periods_y[0]/1000, periods_y[-1]/1000]
+
+#         extent_te  = [periods_y[0]/1000, periods_y[-1]/1000,   # x-axis  (target)
+#                     periods_x[0]/1000, periods_x[-1]/1000]   # y-axis  (source)
+
+#         # --- plots ---------------------------------------------------------
+#         fig, ax = plt.subplots(1, 3, figsize=(15, 3.5),
+#                             gridspec_kw={'width_ratios':[1,1,1.3]})
+
+#         im0 = ax[0].imshow(pow_x, origin='upper', aspect='auto',
+#                         cmap='hot', extent=extent_src)
+#         ax[0].set_title('source scalogram (pre)')
+#         ax[0].set_xlabel('time (ka BP)')
+#         ax[0].set_ylabel('period (ka)')
+#         plt.colorbar(im0, ax=ax[0], fraction=.046)
+
+#         im1 = ax[1].imshow(pow_y, origin='upper', aspect='auto',
+#                         cmap='hot', extent=extent_trg)
+#         ax[1].set_title('target scalogram (sq)')
+#         ax[1].set_xlabel('time (ka BP)')
+#         plt.colorbar(im1, ax=ax[1], fraction=.046)
+
+#         # np.quantile(te_mat,0.5)
+#         im2 = ax[2].imshow(te_mat, origin='upper', aspect='auto',
+#                         cmap=cmap, extent=extent_te, vmin=te_mat.min() , vmax=te_mat.max())
+#         ax[2].set_title('TE  (source phases → target phases)')
+#         ax[2].set_xlabel(f'{target_vname} period (kyr)')
+#         ax[2].set_ylabel(f'{source_vname} period (kyr)')
+#         plt.colorbar(im2, ax=ax[2], fraction=.046)
+
+#         plt.tight_layout(); plt.show()
+
+
+#     return te_mat, periods_x, periods_y
 
 
 
